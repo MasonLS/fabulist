@@ -5,6 +5,11 @@
   "description": "AI-native writing studio powered by Claude Code — every document is a versioned, rewindable agent project",
   "license": "MIT",
   "author": "Mason Seale",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MasonLS/fabulist.git"
+  },
+  "homepage": "https://github.com/MasonLS/fabulist",
   "keywords": [
     "claude",
     "claude-code",
