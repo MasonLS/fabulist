@@ -27,6 +27,9 @@ const api = {
     getModel: (id: string): Promise<string> => ipcRenderer.invoke('doc:getModel', id),
     setModel: (id: string, model: string): Promise<void> =>
       ipcRenderer.invoke('doc:setModel', id, model),
+    getFont: (id: string): Promise<string> => ipcRenderer.invoke('doc:getFont', id),
+    setFont: (id: string, font: string): Promise<void> =>
+      ipcRenderer.invoke('doc:setFont', id, font),
     saveChat: (id: string, chat: ChatItem[]): Promise<void> =>
       ipcRenderer.invoke('doc:saveChat', id, chat),
     onExternalChange: (cb: (id: string, content: string) => void): (() => void) => {

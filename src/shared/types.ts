@@ -115,6 +115,22 @@ export const FALLBACK_MODEL_CHOICES: ModelChoice[] = [
   { value: 'haiku', label: 'Haiku', hint: 'fastest' }
 ]
 
+export interface FontChoice {
+  value: string
+  label: string
+  stack: string
+}
+
+export const FONT_CHOICES: FontChoice[] = [
+  { value: 'newsreader', label: 'Newsreader', stack: "'Newsreader Variable', 'Iowan Old Style', Georgia, serif" },
+  { value: 'literata', label: 'Literata', stack: "'Literata Variable', Georgia, serif" },
+  { value: 'fraunces', label: 'Fraunces', stack: "'Fraunces Variable', 'Iowan Old Style', serif" },
+  { value: 'plex-sans', label: 'Plex Sans', stack: "'IBM Plex Sans', 'Avenir Next', sans-serif" },
+  { value: 'plex-mono', label: 'Plex Mono', stack: "'IBM Plex Mono', 'SF Mono', monospace" }
+]
+
+export const DEFAULT_FONT = FONT_CHOICES[0].value
+
 export interface SendOptions {
   /** When set, Claude's final reply is also appended to this comment thread */
   commentId?: string

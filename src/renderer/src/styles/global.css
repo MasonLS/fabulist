@@ -449,7 +449,38 @@ input::placeholder {
 
 .workspace-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+
+.font-picker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  -webkit-app-region: no-drag;
+  transition: background 140ms ease;
+}
+.font-picker:hover {
+  background: var(--paper-deeper);
+}
+
+.font-picker-glyph {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1;
+}
+
+.font-picker select {
+  appearance: none;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  outline: none;
 }
 
 .agent-dot {

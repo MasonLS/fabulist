@@ -45,6 +45,10 @@ export function registerIpc(win: BrowserWindow): void {
   ipcMain.handle('doc:setModel', (_e, id: string, model: string) =>
     library.patchState(id, { model: model || undefined })
   )
+  ipcMain.handle('doc:getFont', async (_e, id: string) => (await library.readState(id)).font ?? '')
+  ipcMain.handle('doc:setFont', (_e, id: string, font: string) =>
+    library.patchState(id, { font: font || undefined })
+  )
   ipcMain.handle('doc:saveChat', (_e, id: string, chat: unknown[]) =>
     library.patchState(id, { chat })
   )

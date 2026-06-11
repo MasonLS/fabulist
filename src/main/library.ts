@@ -145,6 +145,8 @@ interface DocState {
   chat?: unknown[]
   /** Claude Code model alias/id for this doc's agent; undefined = CLI default */
   model?: string
+  /** editor font choice for this document */
+  font?: string
 }
 
 async function statePath(id: string): Promise<string> {

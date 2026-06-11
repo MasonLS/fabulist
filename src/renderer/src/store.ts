@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import {
+  DEFAULT_FONT,
   DEFAULT_MODEL_CHOICE,
   FALLBACK_MODEL_CHOICES,
   type AgentEvent,
@@ -45,6 +46,7 @@ interface FabulistStore {
   preview: { hash: string; content: string; subject: string } | null
   model: string
   models: ModelChoice[]
+  font: string
   draftComment: DraftComment | null
   activeThreadId: string | null
   /** requestId of a permission currently rendered as an in-document suggestion */
@@ -87,6 +89,7 @@ interface FabulistStore {
   engageClaudeOnThread: (thread: CommentThread) => void
   setModel: (model: string) => void
   loadModels: () => Promise<void>
+  setFont: (font: string) => void
   interrupt: () => void
   respondPermission: (requestId: string, approved: boolean) => void
   setInlineSuggestion: (requestId: string | null) => void
@@ -135,6 +138,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
   preview: null,
   model: '',
   models: FALLBACK_MODEL_CHOICES,
+  font: DEFAULT_FONT,
   draftComment: null,
   activeThreadId: null,
   inlineSuggestionId: null,
@@ -160,12 +164,13 @@ export const useStore = create<FabulistStore>((set, get) => ({
 
   openDoc: async (id) => {
     await get().closeDoc()
-    const [content, rawThreads, chat, commits, model] = await Promise.all([
+    const [content, rawThreads, chat, commits, model, font] = await Promise.all([
       window.fabulist.doc.read(id),
       window.fabulist.comments.list(id),
       window.fabulist.doc.chat(id),
       window.fabulist.history.log(id),
-      window.fabulist.doc.getModel(id)
+      window.fabulist.doc.getModel(id),
+      window.fabulist.doc.getFont(id)
     ])
     const threads = reanchor(rawThreads, content)
     set({
@@ -175,6 +180,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
       threads,
       commits,
       model,
+      font: font || DEFAULT_FONT,
       preview: null,
       draftComment: null,
       activeThreadId: null,
@@ -365,6 +371,13 @@ export const useStore = create<FabulistStore>((set, get) => ({
     if (!id) return
     set({ model })
     window.fabulist.doc.setModel(id, model).catch(() => {})
+  },
+
+  setFont: (font) => {
+    const id = get().activeId
+    if (!id) return
+    set({ font })
+    window.fabulist.doc.setFont(id, font).catch(() => {})
   },
 
   loadModels: async () => {

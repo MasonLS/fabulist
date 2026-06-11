@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { FONT_CHOICES } from '@shared/types'
 import { useStore } from '@/store'
 import Library from '@/components/Library'
 import Editor from '@/components/Editor'
@@ -57,6 +58,7 @@ export default function App(): React.JSX.Element {
           </div>
           {doc && (
             <div className="workspace-actions">
+              <FontPicker />
               <button className="btn-ghost" onClick={() => snapshot()} title="Save a named point in history">
                 Snapshot
               </button>
@@ -82,6 +84,27 @@ export default function App(): React.JSX.Element {
         )}
       </main>
       {doc && sidebarOpen && <Sidebar docId={doc.id} />}
+    </div>
+  )
+}
+
+function FontPicker(): React.JSX.Element {
+  const font = useStore((s) => s.font)
+  const setFont = useStore((s) => s.setFont)
+  const current = FONT_CHOICES.find((f) => f.value === font) ?? FONT_CHOICES[0]
+
+  return (
+    <div className="font-picker" title="Document typeface">
+      <span className="font-picker-glyph" style={{ fontFamily: current.stack }} aria-hidden>
+        Aa
+      </span>
+      <select value={current.value} onChange={(e) => setFont(e.target.value)}>
+        {FONT_CHOICES.map((f) => (
+          <option key={f.value} value={f.value}>
+            {f.label}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }
