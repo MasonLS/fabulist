@@ -24,9 +24,9 @@
   --accent-ink: oklch(0.985 0.008 60);
 
   --selection: oklch(0.885 0.045 55);
-  --thread-bg: oklch(0.92 0.058 88 / 0.6);
-  --thread-bg-active: oklch(0.89 0.085 80 / 0.75);
-  --thread-edge: oklch(0.76 0.1 75);
+  --thread-bg: oklch(0.93 0.05 88 / 0.55);
+  --thread-bg-active: oklch(0.83 0.135 78);
+  --thread-edge: oklch(0.78 0.09 78);
 
   --ok: oklch(0.55 0.12 150);
   --bad: oklch(0.55 0.16 25);
@@ -531,6 +531,24 @@ input::placeholder {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* the selected thread's highlight must be unmissable next to its siblings */
+.cm-thread-active {
+  background: var(--thread-bg-active) !important;
+  border-bottom: 2.5px solid var(--accent) !important;
+  border-radius: 2px;
+  animation: thread-flash 700ms var(--ease-out);
+}
+
+@keyframes thread-flash {
+  0% {
+    background: var(--accent-wash);
+    box-shadow: 0 0 0 4px var(--accent-wash);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
