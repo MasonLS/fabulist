@@ -28,9 +28,9 @@ that you approve or decline before it touches the text.
   Google-Docs-style suggested edits (strikethrough + insertion), with accept/decline
   (⌘⏎ / esc). Commands and non-document files surface as diff cards in chat. Nothing
   reaches the document without your explicit approval.
-- **Comments like a shared doc** — highlight text, start anchored threads that survive edits
-  and rewrites. Ask Claude to weigh in on a thread; its reply lands in the thread and any
-  proposed fix goes through the approval gate.
+- **Comments are the conversation** — highlight text and comment, like a shared doc. Claude
+  reads every comment, replies in the thread, and proposes any text change as a suggested
+  edit. Threads are anchored highlights that survive edits and rewrites.
 - **Versioned and rewindable** — autosave checkpoints, named snapshots, and automatic commits
   for every approved Claude edit. Preview any version as a diff and restore it; restores
   commit forward, so history is never destroyed.

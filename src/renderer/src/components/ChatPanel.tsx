@@ -11,8 +11,6 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
     [allPermissions, docId]
   )
   const agent = useStore((s) => s.agent[docId])
-  const pendingQuote = useStore((s) => s.pendingQuote)
-  const setPendingQuote = useStore((s) => s.setPendingQuote)
   const askClaude = useStore((s) => s.askClaude)
   const interrupt = useStore((s) => s.interrupt)
 
@@ -27,13 +25,9 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
     if (el) el.scrollTop = el.scrollHeight
   }, [chat, permissions])
 
-  useEffect(() => {
-    if (pendingQuote) inputRef.current?.focus()
-  }, [pendingQuote])
-
   const send = (): void => {
     if (!input.trim() || busy) return
-    askClaude(input, pendingQuote ? { quote: pendingQuote } : {})
+    askClaude(input)
     setInput('')
   }
 
@@ -47,7 +41,8 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
               Ask for a read-through, a rewrite, research, or a sharper opening line.
             </p>
             <p className="chat-empty-hint">
-              Highlight any passage in the editor to comment on it or bring it here.
+              Or highlight any passage and comment on it — Claude reads every comment and
+              replies in the thread.
             </p>
           </div>
         )}
@@ -69,14 +64,6 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
       </div>
 
       <div className="chat-compose">
-        {pendingQuote && (
-          <div className="quote-chip">
-            <span className="quote-chip-text">“{truncate(pendingQuote, 120)}”</span>
-            <button onClick={() => setPendingQuote(null)} title="Remove quote">
-              ×
-            </button>
-          </div>
-        )}
         <div className="chat-inputrow">
           <textarea
             ref={inputRef}

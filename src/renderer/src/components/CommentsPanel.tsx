@@ -34,8 +34,8 @@ export default function CommentsPanel(): React.JSX.Element {
       {!draft && threads.length === 0 && (
         <div className="comments-empty">
           <p>
-            Highlight a passage in the editor and choose <strong>Comment</strong> to start a
-            thread. Claude can weigh in on any thread and propose changes to the text.
+            Highlight a passage and choose <strong>Comment</strong>. Claude reads every comment,
+            replies in the thread, and proposes any text changes as suggested edits you approve.
           </p>
         </div>
       )}
@@ -89,6 +89,7 @@ function DraftCard(): React.JSX.Element {
         <button className="btn-ghost btn-small" onClick={cancel}>
           Cancel
         </button>
+        <span className="thread-draft-hint">Claude replies in the thread</span>
       </div>
     </div>
   )
@@ -101,9 +102,11 @@ function ThreadCard({ thread }: { thread: CommentThread }): React.JSX.Element {
   const reply = useStore((s) => s.replyToThread)
   const resolve = useStore((s) => s.resolveThread)
   const remove = useStore((s) => s.removeThread)
-  const askClaude = useStore((s) => s.askClaude)
   const agent = useStore((s) => (s.activeId ? s.agent[s.activeId] : undefined))
   const busy = agent?.status === 'starting' || agent?.status === 'working'
+  const claudeReplying =
+    useStore((s) => s.pendingCommentId === thread.id) && busy
+  const queued = useStore((s) => s.queuedCommentSends.some((q) => q.commentId === thread.id))
 
   const [text, setText] = useState('')
   const isActive = thread.id === activeThreadId
@@ -114,16 +117,6 @@ function ThreadCard({ thread }: { thread: CommentThread }): React.JSX.Element {
     if (thread.status === 'open') {
       useStore.setState({ scrollTo: { threadId: thread.id, seq: ++jumpSeq.current + Date.now() } })
     }
-  }
-
-  const sendToClaude = (): void => {
-    const transcript = thread.messages
-      .map((m) => `${m.author === 'you' ? 'Author' : 'Claude'}: ${m.text}`)
-      .join('\n')
-    askClaude(`Comment thread on the quoted passage:\n\n${transcript}`, {
-      quote: thread.anchor.text,
-      commentId: thread.id
-    })
   }
 
   return (
@@ -147,12 +140,19 @@ function ThreadCard({ thread }: { thread: CommentThread }): React.JSX.Element {
         ))}
       </div>
 
+      {(claudeReplying || queued) && (
+        <div className="thread-replying">
+          <span className="agent-dot agent-working" />
+          {queued ? 'Claude will reply when free…' : 'Claude is replying…'}
+        </div>
+      )}
+
       {thread.status === 'open' && (
         <>
           <textarea
             rows={1}
             value={text}
-            placeholder="Reply…"
+            placeholder="Reply — Claude responds in the thread…"
             onChange={(e) => setText(e.target.value)}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => {
@@ -166,17 +166,6 @@ function ThreadCard({ thread }: { thread: CommentThread }): React.JSX.Element {
             }}
           />
           <div className="thread-actions">
-            <button
-              className="btn-accent btn-small"
-              disabled={busy}
-              onClick={(e) => {
-                e.stopPropagation()
-                sendToClaude()
-              }}
-              title="Claude replies in this thread and may propose an edit"
-            >
-              ✦ Ask Claude
-            </button>
             <button
               className="btn-ghost btn-small"
               onClick={(e) => {

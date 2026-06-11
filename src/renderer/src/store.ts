@@ -43,13 +43,16 @@ interface FabulistStore {
   libraryOpen: boolean
   commits: CommitInfo[]
   preview: { hash: string; content: string; subject: string } | null
-  pendingQuote: string | null
   model: string
   models: ModelChoice[]
   draftComment: DraftComment | null
   activeThreadId: string | null
   /** requestId of a permission currently rendered as an in-document suggestion */
   inlineSuggestionId: string | null
+  /** thread Claude is currently replying to */
+  pendingCommentId: string | null
+  /** comment prompts waiting for the agent to free up */
+  queuedCommentSends: { commentId: string; prompt: string; quote: string }[]
   scrollTo: { threadId: string; seq: number } | null
 
   loadDocs: () => Promise<void>
@@ -80,7 +83,8 @@ interface FabulistStore {
   jumpToThread: (threadId: string) => void
 
   askClaude: (prompt: string, opts?: { quote?: string; commentId?: string }) => void
-  setPendingQuote: (quote: string | null) => void
+  /** send a comment thread to Claude now, or queue it if the agent is busy */
+  engageClaudeOnThread: (thread: CommentThread) => void
   setModel: (model: string) => void
   loadModels: () => Promise<void>
   interrupt: () => void
@@ -129,12 +133,13 @@ export const useStore = create<FabulistStore>((set, get) => ({
   libraryOpen: true,
   commits: [],
   preview: null,
-  pendingQuote: null,
   model: '',
   models: FALLBACK_MODEL_CHOICES,
   draftComment: null,
   activeThreadId: null,
   inlineSuggestionId: null,
+  pendingCommentId: null,
+  queuedCommentSends: [],
   scrollTo: null,
 
   loadDocs: async () => {
@@ -172,10 +177,11 @@ export const useStore = create<FabulistStore>((set, get) => ({
       model,
       preview: null,
       draftComment: null,
-      pendingQuote: null,
       activeThreadId: null,
       permissions: [],
       inlineSuggestionId: null,
+      pendingCommentId: null,
+      queuedCommentSends: [],
       chats: { ...get().chats, [id]: chat ?? [] }
     })
     // watching also re-emits any permission requests pending for this doc
@@ -283,13 +289,39 @@ export const useStore = create<FabulistStore>((set, get) => ({
     const thread = await window.fabulist.comments.add(id, draft.anchor, text.trim())
     set({ draftComment: null, activeThreadId: thread.id })
     await get().reloadThreads()
+    get().engageClaudeOnThread(thread)
   },
 
   replyToThread: async (threadId, text) => {
     const id = get().activeId
     if (!id || !text.trim()) return
-    await window.fabulist.comments.reply(id, threadId, text.trim())
+    const thread = await window.fabulist.comments.reply(id, threadId, text.trim())
     await get().reloadThreads()
+    if (thread) get().engageClaudeOnThread(thread)
+  },
+
+  // every comment engages Claude; if it's mid-run, queue and send when free
+  engageClaudeOnThread: (thread) => {
+    const id = get().activeId
+    if (!id) return
+    const prompt =
+      thread.messages.length === 1
+        ? thread.messages[0].text
+        : 'Comment thread on the quoted passage:\n\n' +
+          thread.messages
+            .map((m) => `${m.author === 'you' ? 'Author' : 'Claude'}: ${m.text}`)
+            .join('\n')
+    const busy = ['starting', 'working'].includes(get().agent[id]?.status ?? '')
+    if (busy) {
+      set({
+        queuedCommentSends: [
+          ...get().queuedCommentSends.filter((q) => q.commentId !== thread.id),
+          { commentId: thread.id, prompt, quote: thread.anchor.text }
+        ]
+      })
+      return
+    }
+    get().askClaude(prompt, { quote: thread.anchor.text, commentId: thread.id })
   },
 
   resolveThread: async (threadId, status) => {
@@ -321,12 +353,12 @@ export const useStore = create<FabulistStore>((set, get) => ({
   askClaude: (prompt, opts = {}) => {
     const id = get().activeId
     if (!id || !prompt.trim()) return
-    set({ tab: 'chat', sidebarOpen: true, pendingQuote: null })
+    // comment-initiated prompts reply into the thread — stay where the user is
+    if (opts.commentId) set({ pendingCommentId: opts.commentId, sidebarOpen: true })
+    else set({ tab: 'chat', sidebarOpen: true })
     void get().flushWrite()
     window.fabulist.agent.send(id, prompt.trim(), opts)
   },
-
-  setPendingQuote: (quote) => set({ pendingQuote: quote, tab: 'chat', sidebarOpen: true }),
 
   setModel: (model) => {
     const id = get().activeId
@@ -444,7 +476,14 @@ export const useStore = create<FabulistStore>((set, get) => ({
         break
       case 'permission-request':
         if (e.docId === activeId && !get().permissions.some((p) => p.requestId === e.request.requestId)) {
-          set({ permissions: [...get().permissions, e.request], tab: 'chat', sidebarOpen: true })
+          // document edits render inline in the editor — only pull the user to
+          // the chat tab for requests that have nowhere else to appear
+          const inline = e.request.filePath === 'document.md'
+          set({
+            permissions: [...get().permissions, e.request],
+            sidebarOpen: true,
+            ...(inline ? {} : { tab: 'chat' as const })
+          })
         }
         break
       case 'permission-resolved':
@@ -459,10 +498,17 @@ export const useStore = create<FabulistStore>((set, get) => ({
         }
         const chat = get().chats[e.docId]
         if (chat) window.fabulist.doc.saveChat(e.docId, chat.slice(-200)).catch(() => {})
+        if (e.commentId === get().pendingCommentId) set({ pendingCommentId: null })
         if (e.docId === activeId) {
           get().loadHistory()
           get().loadDocs()
           if (e.commentId) get().reloadThreads()
+          // a comment may have queued while Claude was busy — send it now
+          const [next, ...rest] = get().queuedCommentSends
+          if (next) {
+            set({ queuedCommentSends: rest })
+            get().askClaude(next.prompt, { quote: next.quote, commentId: next.commentId })
+          }
         }
         break
       }

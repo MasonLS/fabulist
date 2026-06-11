@@ -200,13 +200,6 @@ export default function Editor({ docId }: { docId: string }): React.JSX.Element 
     setSelection(null)
   }
 
-  const onAskClaude = (): void => {
-    if (!selection) return
-    const content = useStore.getState().content
-    useStore.getState().setPendingQuote(content.slice(selection.from, selection.to))
-    setSelection(null)
-  }
-
   return (
     <div className="editor-host" ref={hostRef}>
       {suggestion && (
@@ -236,12 +229,8 @@ export default function Editor({ docId }: { docId: string }): React.JSX.Element 
           className="selection-toolbar"
           style={{ left: selection.left, top: Math.max(8, selection.top - 46) }}
         >
-          <button onClick={onComment}>
+          <button onClick={onComment} title="Comment — Claude reads every comment and replies in the thread">
             <MarkIcon /> Comment
-          </button>
-          <span className="selection-toolbar-divider" />
-          <button onClick={onAskClaude}>
-            <SparkIcon /> Ask Claude
           </button>
         </div>
       )}
@@ -262,15 +251,3 @@ function MarkIcon(): React.JSX.Element {
   )
 }
 
-function SparkIcon(): React.JSX.Element {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M8 1.5 9.6 6 14 8l-4.4 1.6L8 14.5 6.4 9.6 2 8l4.4-2L8 1.5Z"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}

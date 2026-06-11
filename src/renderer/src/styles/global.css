@@ -1148,7 +1148,23 @@ input::placeholder {
 
 .thread-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
+}
+
+.thread-draft-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.thread-replying {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding: 2px 0 10px;
 }
 
 /* ─── history ─── */
