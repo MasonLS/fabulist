@@ -1,0 +1,36 @@
+appId: app.fabulist
+productName: Fabulist
+directories:
+  output: dist
+files:
+  - '!src/**'
+  - '!scripts/**'
+  - '!docs/**'
+  - '!electron.vite.config.ts'
+  - '!electron-builder.yml'
+  - '!tsconfig*.json'
+  - '!README.md'
+  - '!CLAUDE.md'
+  - '!CONTRIBUTING.md'
+  - '!.gitignore'
+# the Agent SDK spawns its native Claude Code engine binary as a subprocess,
+# so the SDK and its platform binary package must live outside the asar archive
+# (src/main/agent.ts redirects pathToClaudeCodeExecutable to the unpacked copy)
+asarUnpack:
+  - node_modules/@anthropic-ai/claude-agent-sdk/**
+  - node_modules/@anthropic-ai/claude-agent-sdk-*/**
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  # unsigned local builds; set your identity to distribute notarized builds
+  identity: null
+win:
+  target: nsis
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office
+npmRebuild: false
