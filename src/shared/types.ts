@@ -56,6 +56,8 @@ export interface PermissionRequest {
   /** For file edits: text being replaced / replacement (or whole file for Write) */
   before?: string
   after?: string
+  /** Structured edit list (Edit/MultiEdit) — lets the editor render inline suggestions */
+  edits?: { old: string; new: string; all?: boolean }[]
   /** For Bash: the command */
   command?: string
   /** Human summary line */

@@ -167,8 +167,29 @@ function ChatBubble({ item }: { item: ChatItem }): React.JSX.Element {
 
 function ApprovalCard({ request }: { request: PermissionRequest }): React.JSX.Element {
   const respond = useStore((s) => s.respondPermission)
+  const shownInline = useStore((s) => s.inlineSuggestionId === request.requestId)
   const isDocEdit = request.filePath === 'document.md'
   const isWholeFile = request.tool === 'Write'
+
+  // the suggestion is rendered in the document itself — keep chat compact
+  if (shownInline) {
+    return (
+      <div className="approval approval-inline">
+        <div className="approval-head">
+          <span className="approval-kind">Suggested edit — shown in the document</span>
+          <span className="approval-tool">{request.tool}</span>
+        </div>
+        <div className="approval-actions">
+          <button className="btn-primary" onClick={() => respond(request.requestId, true)}>
+            Accept
+          </button>
+          <button className="btn-ghost" onClick={() => respond(request.requestId, false)}>
+            Decline
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="approval">

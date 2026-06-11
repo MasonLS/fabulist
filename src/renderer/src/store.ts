@@ -48,6 +48,8 @@ interface FabulistStore {
   models: ModelChoice[]
   draftComment: DraftComment | null
   activeThreadId: string | null
+  /** requestId of a permission currently rendered as an in-document suggestion */
+  inlineSuggestionId: string | null
   scrollTo: { threadId: string; seq: number } | null
 
   loadDocs: () => Promise<void>
@@ -83,6 +85,7 @@ interface FabulistStore {
   loadModels: () => Promise<void>
   interrupt: () => void
   respondPermission: (requestId: string, approved: boolean) => void
+  setInlineSuggestion: (requestId: string | null) => void
 
   loadHistory: () => Promise<void>
   openPreview: (commit: CommitInfo) => Promise<void>
@@ -131,6 +134,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
   models: FALLBACK_MODEL_CHOICES,
   draftComment: null,
   activeThreadId: null,
+  inlineSuggestionId: null,
   scrollTo: null,
 
   loadDocs: async () => {
@@ -348,6 +352,10 @@ export const useStore = create<FabulistStore>((set, get) => ({
 
   respondPermission: (requestId, approved) => {
     window.fabulist.agent.respondPermission(requestId, approved)
+  },
+
+  setInlineSuggestion: (requestId) => {
+    if (get().inlineSuggestionId !== requestId) set({ inlineSuggestionId: requestId })
   },
 
   loadHistory: async () => {

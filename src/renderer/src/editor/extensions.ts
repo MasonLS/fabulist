@@ -1,5 +1,13 @@
-import { EditorView, Decoration, type DecorationSet, keymap, placeholder } from '@codemirror/view'
+import {
+  EditorView,
+  Decoration,
+  WidgetType,
+  type DecorationSet,
+  keymap,
+  placeholder
+} from '@codemirror/view'
 import { EditorState, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state'
+import type { SuggestSegment } from '@/lib/suggest'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { syntaxHighlighting, HighlightStyle } from '@codemirror/language'
@@ -59,6 +67,60 @@ export function currentThreadRanges(state: EditorState): { id: string; from: num
   }
   return out
 }
+
+// ---------- inline suggestions (Claude's pending edit, Google-Docs style) ----------
+
+export const setSuggestion = StateEffect.define<SuggestSegment[] | null>()
+
+class InsertionWidget extends WidgetType {
+  constructor(readonly text: string) {
+    super()
+  }
+  eq(other: InsertionWidget): boolean {
+    return other.text === this.text
+  }
+  toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'cm-suggest-ins'
+    span.textContent = this.text
+    return span
+  }
+  ignoreEvent(): boolean {
+    return true
+  }
+}
+
+export const suggestionField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes)
+    for (const e of tr.effects) {
+      if (!e.is(setSuggestion)) continue
+      if (!e.value) {
+        deco = Decoration.none
+        continue
+      }
+      const segs = [...e.value]
+        .filter((s) => s.from <= tr.newDoc.length && s.to <= tr.newDoc.length)
+        .sort((a, b) => a.from - b.from || (a.kind === 'del' ? -1 : 1))
+      const builder = new RangeSetBuilder<Decoration>()
+      for (const s of segs) {
+        if (s.kind === 'del') {
+          builder.add(s.from, s.to, Decoration.mark({ class: 'cm-suggest-del' }))
+        } else {
+          builder.add(
+            s.from,
+            s.from,
+            Decoration.widget({ widget: new InsertionWidget(s.text ?? ''), side: 1 })
+          )
+        }
+      }
+      deco = builder.finish()
+    }
+    return deco
+  },
+  provide: (f) => EditorView.decorations.from(f)
+})
 
 // ---------- markdown typography ----------
 
@@ -124,6 +186,7 @@ export function baseExtensions(): ReturnType<typeof markdown>[] {
     EditorView.lineWrapping,
     editorTheme,
     placeholder('Begin…'),
-    threadField
+    threadField,
+    suggestionField
   ] as ReturnType<typeof markdown>[]
 }

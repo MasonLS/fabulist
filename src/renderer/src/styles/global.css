@@ -42,11 +42,18 @@
   box-sizing: border-box;
 }
 
+/* clip (not hidden): app chrome must never scroll, even programmatically —
+   scrollIntoView from the editor or panels walks ancestor scrollables */
 html,
 body,
 #root {
   height: 100%;
-  overflow: hidden;
+  overflow: clip;
+}
+
+.app,
+.workspace {
+  overflow: clip;
 }
 
 body {
@@ -525,6 +532,58 @@ input::placeholder {
   }
 }
 
+/* ─── inline suggestions (Claude's pending edit) ─── */
+
+.cm-suggest-del {
+  background: oklch(0.94 0.04 25 / 0.75);
+  color: oklch(0.45 0.11 25);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: oklch(0.55 0.14 25 / 0.8);
+  border-radius: 2px;
+}
+
+.cm-suggest-ins {
+  background: oklch(0.93 0.055 150 / 0.8);
+  color: oklch(0.32 0.09 150);
+  border-bottom: 2px solid oklch(0.55 0.11 150);
+  border-radius: 2px;
+  white-space: pre-wrap;
+}
+
+.suggest-bar {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--accent);
+  border-radius: 99px;
+  padding: 7px 9px 7px 16px;
+  box-shadow: var(--shadow-pop);
+  animation: rise 220ms var(--ease-out);
+  white-space: nowrap;
+}
+
+.suggest-bar-glyph {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.suggest-bar-label {
+  font-weight: 560;
+  font-size: 13px;
+  margin-right: 2px;
+}
+
+.suggest-bar .btn-small {
+  border-radius: 99px;
+}
+
 /* ─── empty state ─── */
 
 .empty-state {
@@ -909,6 +968,15 @@ input::placeholder {
   display: flex;
   gap: 8px;
   padding: 10px 13px 13px;
+}
+
+.approval-inline .approval-head {
+  background: transparent;
+  border-bottom: 1px solid var(--line-soft);
+}
+.approval-inline .approval-kind {
+  color: var(--ink-soft);
+  font-weight: 520;
 }
 
 /* ─── diff rendering ─── */

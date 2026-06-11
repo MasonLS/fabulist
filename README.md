@@ -9,9 +9,9 @@ that you approve or decline before it touches the text.
 
 ![Fabulist — comments anchored to the manuscript, with Claude in the thread](docs/hero.png)
 
-**Every edit Claude proposes arrives as a diff you approve or decline:**
+**Every edit Claude proposes appears in the document as a suggested edit — strikethrough and insertion, accept or decline:**
 
-![Approving a Claude edit](docs/approval.png)
+![Reviewing a suggested edit inline](docs/approval.png)
 
 **Every save, snapshot, and approved edit is a point you can return to:**
 
@@ -24,7 +24,9 @@ that you approve or decline before it touches the text.
 - **An agent that knows the document** — chat in the sidebar; Claude reads, researches, and
   edits the doc with full project context (each doc has its own `CLAUDE.md` it loads).
   Per-document model picker, populated live from whatever your Claude Code version offers.
-- **Human-approved edits** — file changes and commands surface as inline diff cards. Nothing
+- **Human-approved edits** — Claude's proposed changes render in the document itself as
+  Google-Docs-style suggested edits (strikethrough + insertion), with accept/decline
+  (⌘⏎ / esc). Commands and non-document files surface as diff cards in chat. Nothing
   reaches the document without your explicit approval.
 - **Comments like a shared doc** — highlight text, start anchored threads that survive edits
   and rewrites. Ask Claude to weigh in on a thread; its reply lands in the thread and any
@@ -83,8 +85,10 @@ Your documents live in `~/Documents/Fabulist/`, one folder per document:
 
 1. Claude calls `Edit`/`Write` on a file → `canUseTool` fires in the main process.
 2. Main computes before/after, sends a permission request over IPC.
-3. The renderer shows a diff card in the chat panel; you click **Apply** or **Decline**.
-4. On approve, the SDK executes the edit; a file watcher picks up the change and the
+3. For the document itself, the editor renders the change inline as a suggested edit
+   (old text struck through, new text inserted) and locks the doc while you review;
+   commands and other files show as diff cards in the chat panel.
+4. On accept, the SDK executes the edit; a file watcher picks up the change and the
    editor updates live; the turn ends with an automatic `Claude: <prompt>` commit.
 
 ## Privacy

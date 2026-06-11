@@ -376,10 +376,18 @@ export class AgentManager {
     } else if (tool === 'Edit') {
       request.before = String(input.old_string ?? '')
       request.after = String(input.new_string ?? '')
+      request.edits = [
+        { old: request.before, new: request.after, all: Boolean(input.replace_all) }
+      ]
     } else if (tool === 'MultiEdit' && Array.isArray(input.edits)) {
-      const edits = input.edits as { old_string?: string; new_string?: string }[]
+      const edits = input.edits as { old_string?: string; new_string?: string; replace_all?: boolean }[]
       request.before = edits.map((e) => e.old_string ?? '').join('\n…\n')
       request.after = edits.map((e) => e.new_string ?? '').join('\n…\n')
+      request.edits = edits.map((e) => ({
+        old: String(e.old_string ?? ''),
+        new: String(e.new_string ?? ''),
+        all: Boolean(e.replace_all)
+      }))
     }
     return request
   }
