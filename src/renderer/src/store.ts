@@ -14,7 +14,7 @@ import {
 } from '@shared/types'
 import { locateAnchor } from './lib/anchors'
 
-export type SidebarTab = 'chat' | 'comments' | 'history'
+export type SidebarTab = 'chat' | 'comments' | 'history' | 'skills'
 
 export interface DraftComment {
   anchor: CommentAnchor
@@ -58,6 +58,8 @@ interface FabulistStore {
   /** comment prompts waiting for the agent to free up */
   queuedCommentSends: { commentId: string; prompt: string; quote: string }[]
   scrollTo: { threadId: string; seq: number } | null
+  /** opt-in scroll request to a document offset (e.g. "Show in document" on an edit card) */
+  revealPos: { pos: number; seq: number } | null
 
   loadDocs: () => Promise<void>
   createDoc: (title: string) => Promise<void>
@@ -96,6 +98,8 @@ interface FabulistStore {
   interrupt: () => void
   respondPermission: (requestId: string, approved: boolean) => void
   setInlineSuggestion: (requestId: string | null) => void
+  /** scroll the editor to where an applied edit landed (best-effort, by quote) */
+  revealEdit: (edit: NonNullable<ChatItem['edit']>) => void
 
   loadHistory: () => Promise<void>
   openPreview: (commit: CommitInfo) => Promise<void>
@@ -149,6 +153,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
   pendingCommentId: null,
   queuedCommentSends: [],
   scrollTo: null,
+  revealPos: null,
 
   loadDocs: async () => {
     set({ docs: await window.fabulist.library.list() })
@@ -379,6 +384,15 @@ export const useStore = create<FabulistStore>((set, get) => ({
     window.fabulist.doc.setModel(id, model).catch(() => {})
   },
 
+  revealEdit: (edit) => {
+    // locate by the inserted text (fall back to the replaced text) in the
+    // current content — positions from the edit itself would be stale
+    const { content } = get()
+    const needle = [edit.after, edit.before].find((s) => s && content.includes(s))
+    if (needle === undefined) return
+    set({ revealPos: { pos: content.indexOf(needle), seq: extSeq++ } })
+  },
+
   setAutoApprove: (on) => {
     const id = get().activeId
     if (!id) return
@@ -511,6 +525,23 @@ export const useStore = create<FabulistStore>((set, get) => ({
             ...(inline ? {} : { tab: 'chat' as const })
           })
         }
+        break
+      case 'edit-applied':
+        updateChat(e.docId, (items) => [
+          ...items,
+          {
+            id: e.request.requestId,
+            role: 'assistant',
+            text: '',
+            at: Date.now(),
+            edit: {
+              tool: e.request.tool,
+              filePath: e.request.filePath,
+              before: e.request.before ?? '',
+              after: e.request.after ?? ''
+            }
+          }
+        ])
         break
       case 'permission-resolved':
         set({ permissions: get().permissions.filter((p) => p.requestId !== e.requestId) })

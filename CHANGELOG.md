@@ -6,6 +6,12 @@ All notable changes to Fabulist are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Skills**: a new sidebar tab for installing Claude Code skills (SKILL.md instruction
+  packs) from a local file/folder or a skills.sh / archive URL, then toggling them on
+  per document. Local and stateless: the library is a plain folder at
+  `~/Documents/Fabulist/.skills/`, enabling symlinks a skill into the document's
+  `.claude/skills/` where the engine discovers it; nothing is fetched again after
+  install. Skill scripts still run through the Bash approval gate.
 - **Auto-apply edits** toggle under the chat composer: when on, Claude's file edits apply
   immediately with no approval cards, so it can revise non-stop. Commands (Bash) still
   ask, every run is still committed, and the setting persists per document. Flipping it
@@ -13,7 +19,15 @@ All notable changes to Fabulist are documented here. The format follows
 - Per-document editor typeface: an **Aa** picker in the header (Newsreader, Literata,
   Fraunces, Plex Sans, Plex Mono — all bundled, offline), persisted per document.
 
+### Fixed
+- External edits (Claude's, or any change on disk) no longer yank the editor: the
+  update is applied as a minimal text change instead of a whole-document replace, so
+  scroll position and cursor stay where you are while reading.
+
 ### Changed
+- Auto-applied edits leave a collapsed diff card in chat ("Edited document.md") with a
+  **Show in document** button — review what changed, and jump to it only when you choose.
+
 - Comments always engage Claude: submitting a comment or thread reply automatically sends
   the highlighted passage and thread to Claude, whose reply lands in the thread (queued if
   the agent is mid-task). The separate "Ask Claude" selection action and chat quote-chip

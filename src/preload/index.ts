@@ -5,8 +5,10 @@ import type {
   CommentThread,
   CommitInfo,
   DocMeta,
+  DocSkill,
   ModelChoice,
-  SendOptions
+  SendOptions,
+  SkillMeta
 } from '@shared/types'
 
 const api = {
@@ -66,6 +68,19 @@ const api = {
       ipcRenderer.on('comments:changed', listener)
       return () => ipcRenderer.removeListener('comments:changed', listener)
     }
+  },
+  skills: {
+    installFromDisk: (): Promise<SkillMeta[]> => ipcRenderer.invoke('skills:installFromDisk'),
+    installFromUrl: (url: string): Promise<SkillMeta[]> =>
+      ipcRenderer.invoke('skills:installFromUrl', url),
+    list: (): Promise<SkillMeta[]> => ipcRenderer.invoke('skills:list'),
+    listForDoc: (docId: string): Promise<DocSkill[]> =>
+      ipcRenderer.invoke('skills:listForDoc', docId),
+    setEnabled: (docId: string, slug: string, on: boolean): Promise<void> =>
+      ipcRenderer.invoke('skills:setEnabled', docId, slug, on),
+    remove: (slug: string): Promise<void> => ipcRenderer.invoke('skills:remove', slug),
+    read: (slug: string): Promise<string> => ipcRenderer.invoke('skills:read', slug),
+    reveal: (): Promise<void> => ipcRenderer.invoke('skills:reveal')
   },
   agent: {
     send: (id: string, prompt: string, opts?: SendOptions): Promise<void> =>

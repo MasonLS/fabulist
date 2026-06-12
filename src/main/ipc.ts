@@ -7,6 +7,7 @@ import * as library from './library'
 import * as git from './git'
 import * as comments from './comments'
 import { agentManager } from './agent'
+import * as skills from './skills'
 
 const DOC_FILE = library.DOC_FILE
 
@@ -58,6 +59,20 @@ export function registerIpc(win: BrowserWindow): void {
   ipcMain.handle('doc:saveChat', (_e, id: string, chat: unknown[]) =>
     library.patchState(id, { chat })
   )
+
+  // --- skills (self-contained; see src/main/skills.ts) ---
+  ipcMain.handle('skills:installFromDisk', () => skills.installFromDisk())
+  ipcMain.handle('skills:installFromUrl', (_e, url: string) => skills.installFromUrl(url))
+  ipcMain.handle('skills:list', () => skills.list())
+  ipcMain.handle('skills:listForDoc', (_e, docId: string) => skills.listForDoc(docId))
+  ipcMain.handle('skills:setEnabled', (_e, docId: string, slug: string, on: boolean) =>
+    skills.setEnabled(docId, slug, on)
+  )
+  ipcMain.handle('skills:remove', (_e, slug: string) => skills.remove(slug))
+  ipcMain.handle('skills:read', (_e, slug: string) => skills.readSkillFile(slug))
+  ipcMain.handle('skills:reveal', () => {
+    shell.openPath(skills.SKILLS_ROOT)
+  })
 
   // --- history ---
   ipcMain.handle('history:log', (_e, id: string) => git.log(library.docPath(id)))

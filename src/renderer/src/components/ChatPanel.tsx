@@ -143,6 +143,7 @@ function ModelPicker({ disabled }: { disabled: boolean }): React.JSX.Element {
 }
 
 function ChatBubble({ item }: { item: ChatItem }): React.JSX.Element {
+  if (item.edit) return <AppliedEditCard item={item} />
   if (item.role === 'user') {
     return (
       <div className="bubble bubble-user">
@@ -174,6 +175,39 @@ function ChatBubble({ item }: { item: ChatItem }): React.JSX.Element {
         )
       )}
     </div>
+  )
+}
+
+function AppliedEditCard({ item }: { item: ChatItem }): React.JSX.Element {
+  const revealEdit = useStore((s) => s.revealEdit)
+  const edit = item.edit!
+  const isDoc = edit.filePath === 'document.md'
+  return (
+    <details className="applied-edit">
+      <summary>
+        <span className="applied-edit-label">
+          ✦ Edited {edit.filePath ?? 'files'}
+        </span>
+        {isDoc && (
+          <button
+            className="btn-ghost btn-small"
+            onClick={(e) => {
+              e.preventDefault()
+              revealEdit(edit)
+            }}
+          >
+            Show in document
+          </button>
+        )}
+      </summary>
+      <div className="approval-diff">
+        <DiffView
+          before={edit.before}
+          after={edit.after}
+          mode={edit.tool === 'Write' ? 'lines' : 'words'}
+        />
+      </div>
+    </details>
   )
 }
 

@@ -357,7 +357,12 @@ export class AgentManager {
     if (fileTools.has(tool)) {
       const { autoApprove } = await readState(docId).catch(() => ({ autoApprove: false }))
       if (autoApprove) {
-        if (filePath) onEditApplied()
+        if (filePath) {
+          onEditApplied()
+          // leave a record in chat: same diff data an approval card would carry
+          const request = await this.buildRequest(docId, cwd, tool, input, filePath)
+          this.emit({ kind: 'edit-applied', docId, request })
+        }
         return { behavior: 'allow', updatedInput: input }
       }
     }
