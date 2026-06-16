@@ -5,6 +5,10 @@ All notable changes to Fabulist are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- The sidebar toggle in the workspace header is now an icon button (matching the library
+  toggle) instead of a "Panel" text label.
+
 ### Added
 - **Multiple conversations per document**: a thread switcher above the chat lets you start
   a fresh conversation with Claude (＋), switch between existing ones, and rename or delete

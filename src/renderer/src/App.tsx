@@ -63,11 +63,11 @@ export default function App(): React.JSX.Element {
                 Snapshot
               </button>
               <button
-                className={`btn-ghost ${sidebarOpen ? 'is-on' : ''}`}
+                className={`btn-ghost btn-icon ${sidebarOpen ? 'is-on' : ''}`}
                 onClick={toggleSidebar}
                 title="Toggle sidebar"
               >
-                Panel
+                <PanelIcon />
               </button>
             </div>
           )}
@@ -114,6 +114,15 @@ function RailIcon(): React.JSX.Element {
     <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
       <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
       <path d="M6 2.5v11" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  )
+}
+
+function PanelIcon(): React.JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M10 2.5v11" stroke="currentColor" strokeWidth="1.3" />
     </svg>
   )
 }
