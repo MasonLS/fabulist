@@ -5,6 +5,7 @@ import {
   FALLBACK_MODEL_CHOICES,
   type AgentEvent,
   type AgentThread,
+  type Attachment,
   type ChatItem,
   type CommentAnchor,
   type CommentThread,
@@ -98,7 +99,10 @@ interface FabulistStore {
   renameAgentThread: (threadId: string, title: string) => Promise<void>
   deleteAgentThread: (threadId: string) => Promise<void>
 
-  askClaude: (prompt: string, opts?: { quote?: string; commentId?: string }) => void
+  askClaude: (
+    prompt: string,
+    opts?: { quote?: string; commentId?: string; attachments?: Attachment[] }
+  ) => void
   /** send a comment thread to Claude now, or queue it if the agent is busy */
   engageClaudeOnThread: (thread: CommentThread) => void
   setModel: (model: string) => void
@@ -443,7 +447,8 @@ export const useStore = create<FabulistStore>((set, get) => ({
 
   askClaude: (prompt, opts = {}) => {
     const id = get().activeId
-    if (!id || !prompt.trim()) return
+    // allow attachment-only messages (no text)
+    if (!id || (!prompt.trim() && !opts.attachments?.length)) return
     const threadId = get().activeThread[id]
     if (!threadId) return
     // comment-initiated prompts reply into the thread — stay where the user is
@@ -564,7 +569,14 @@ export const useStore = create<FabulistStore>((set, get) => ({
       case 'user-echo':
         updateChat(e.threadId, (items) => [
           ...items,
-          { id: e.itemId, role: 'user', text: e.text, quote: e.quote, at: Date.now() }
+          {
+            id: e.itemId,
+            role: 'user',
+            text: e.text,
+            quote: e.quote,
+            attachments: e.attachments,
+            at: Date.now()
+          }
         ])
         break
       case 'text-delta':

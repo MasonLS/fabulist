@@ -1,4 +1,4 @@
-import { ipcMain, shell, type BrowserWindow } from 'electron'
+import { ipcMain, shell, dialog, type BrowserWindow } from 'electron'
 import { watch, promises as fs, type FSWatcher } from 'node:fs'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
@@ -117,6 +117,14 @@ export function registerIpc(win: BrowserWindow): void {
         detail: err instanceof Error ? err.message : String(err)
       })
     })
+  })
+  ipcMain.handle('agent:pick-attachments', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: 'Attach files',
+      properties: ['openFile', 'multiSelections']
+    })
+    if (canceled) return []
+    return filePaths.map((p) => ({ path: p, name: path.basename(p) }))
   })
   ipcMain.handle('agent:interrupt', (_e, id: string) => agentManager.interrupt(id))
   ipcMain.handle('agent:busy', (_e, id: string) => agentManager.isBusy(id))

@@ -1254,6 +1254,95 @@ input::placeholder {
   cursor: default;
 }
 
+.chat-attach {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  font-size: 15px;
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  transition: background 140ms ease, color 140ms ease;
+}
+.chat-attach:hover:not(:disabled) {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+.chat-attach:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ─── attachment chips (compose row and user bubbles) ─── */
+
+.chat-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.bubble-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  background: var(--thread-bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 4px 6px 4px 9px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.attachment-chip-static {
+  padding: 4px 9px;
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  font-size: 14px;
+  line-height: 1;
+}
+.attachment-remove:hover {
+  color: var(--ink);
+}
+
+/* ─── drag-and-drop overlay ─── */
+
+.chat-dragging {
+  position: relative;
+}
+
+.chat-dropzone {
+  position: absolute;
+  inset: 8px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+}
+
 .compose-footer {
   display: flex;
   align-items: center;

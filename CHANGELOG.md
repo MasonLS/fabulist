@@ -18,6 +18,11 @@ All notable changes to Fabulist are documented here. The format follows
   toggle) instead of a "Panel" text label.
 
 ### Added
+- **Attach files to a chat message**: a 📎 button (and drag-and-drop onto the chat panel)
+  lets you attach one or more files to a message for Claude. Images and PDFs are sent inline
+  so Claude sees them directly; other files (text, code, data, …) are copied into the
+  document's project folder and referenced so Claude can open them with its Read tool.
+  Attachments show as removable chips while composing and stay visible on the sent message.
 - **Multiple conversations per document**: a thread switcher above the chat lets you start
   a fresh conversation with Claude (＋), switch between existing ones, and rename or delete
   them. Each thread keeps its own transcript and resumable Claude session, so context stays

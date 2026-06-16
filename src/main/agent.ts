@@ -152,7 +152,15 @@ export class AgentManager {
     const emit: Emitter = (e) => this.emit(e)
 
     const userItemId = newId()
-    emit({ kind: 'user-echo', docId, threadId, itemId: userItemId, text: prompt, quote: opts.quote })
+    emit({
+      kind: 'user-echo',
+      docId,
+      threadId,
+      itemId: userItemId,
+      text: prompt,
+      quote: opts.quote,
+      attachments: opts.attachments?.map((a) => a.name)
+    })
     emit({ kind: 'status', docId, status: 'starting' })
 
     const state = await readState(docId)
@@ -165,12 +173,12 @@ export class AgentManager {
     const abort = new AbortController()
     let editsApplied = 0
 
-    const fullPrompt = buildPrompt(prompt, opts)
+    const content = await buildUserContent(cwd, prompt, opts)
 
     async function* input(): AsyncGenerator<SDKUserMessage> {
       yield {
         type: 'user',
-        message: { role: 'user', content: fullPrompt },
+        message: { role: 'user', content },
         parent_tool_use_id: null,
         session_id: ''
       }
@@ -453,6 +461,103 @@ function buildPrompt(prompt: string, opts: SendOptions): string {
   }
   parts.push(prompt)
   return parts.join('\n\n')
+}
+
+// Anthropic API ceilings; over these we fall back to copy-into-project + Read.
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+}
+const MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_INLINE_PDF_BYTES = 32 * 1024 * 1024
+
+/** Copy an attached file into the doc's `attachments/` folder, suffixing on name collision. */
+async function copyAttachmentIntoProject(cwd: string, src: string, name: string): Promise<string> {
+  const dir = path.join(cwd, 'attachments')
+  await fs.mkdir(dir, { recursive: true })
+  const ext = path.extname(name)
+  const base = path.basename(name, ext)
+  let candidate = name
+  for (let n = 1; ; n++) {
+    try {
+      await fs.access(path.join(dir, candidate))
+      candidate = `${base}-${n}${ext}`
+    } catch {
+      break // free name
+    }
+  }
+  await fs.copyFile(src, path.join(dir, candidate))
+  return path.posix.join('attachments', candidate)
+}
+
+/**
+ * Build the SDK user-message content. With no attachments this is the plain
+ * prompt string (unchanged behavior). Images and PDFs ride along as base64
+ * content blocks; everything else is copied into the project folder and
+ * referenced so Claude can open it with its Read tool.
+ */
+async function buildUserContent(
+  cwd: string,
+  prompt: string,
+  opts: SendOptions
+): Promise<string | unknown[]> {
+  const text = buildPrompt(prompt, opts)
+  const attachments = opts.attachments ?? []
+  if (attachments.length === 0) return text
+
+  const blocks: unknown[] = []
+  const copied: string[] = []
+  const failed: string[] = []
+
+  for (const att of attachments) {
+    const ext = path.extname(att.name).toLowerCase()
+    try {
+      if (IMAGE_MEDIA_TYPES[ext]) {
+        const buf = await fs.readFile(att.path)
+        if (buf.byteLength <= MAX_INLINE_IMAGE_BYTES) {
+          blocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: IMAGE_MEDIA_TYPES[ext], data: buf.toString('base64') }
+          })
+          continue
+        }
+      } else if (ext === '.pdf') {
+        const buf = await fs.readFile(att.path)
+        if (buf.byteLength <= MAX_INLINE_PDF_BYTES) {
+          blocks.push({
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: buf.toString('base64') },
+            title: att.name
+          })
+          continue
+        }
+      }
+      // unsupported type, or too large to inline: keep it in the workspace
+      copied.push(await copyAttachmentIntoProject(cwd, att.path, att.name))
+    } catch {
+      failed.push(att.name)
+    }
+  }
+
+  let leadText = text
+  if (copied.length) {
+    leadText +=
+      `\n\nThe author attached these files (in the project folder):\n` +
+      copied.map((p) => `- ${p}`).join('\n') +
+      '\n\nUse your Read tool to open any you need.'
+  }
+  if (failed.length) {
+    leadText += `\n\n(Could not read these attachments: ${failed.join(', ')}.)`
+  }
+
+  if (blocks.length === 0) return leadText
+  const content: unknown[] = []
+  if (leadText.trim()) content.push({ type: 'text', text: leadText })
+  content.push(...blocks)
+  return content
 }
 
 function describeTool(tool: string, input: Record<string, unknown>, cwd: string): string {

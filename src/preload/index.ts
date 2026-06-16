@@ -1,7 +1,8 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AgentEvent,
   AgentThread,
+  Attachment,
   ChatItem,
   CommentThread,
   CommitInfo,
@@ -65,6 +66,9 @@ const api = {
   agent: {
     send: (id: string, threadId: string, prompt: string, opts?: SendOptions): Promise<void> =>
       ipcRenderer.invoke('agent:send', id, threadId, prompt, opts ?? {}),
+    pickAttachments: (): Promise<Attachment[]> => ipcRenderer.invoke('agent:pick-attachments'),
+    // webUtils is only available in the preload, not the sandboxed renderer
+    attachmentPathForFile: (file: File): string => webUtils.getPathForFile(file),
     interrupt: (id: string): Promise<void> => ipcRenderer.invoke('agent:interrupt', id),
     busy: (id: string): Promise<boolean> => ipcRenderer.invoke('agent:busy', id),
     models: (): Promise<ModelChoice[]> => ipcRenderer.invoke('agent:models'),

@@ -66,7 +66,15 @@ export interface PermissionRequest {
 
 export type AgentEvent =
   | { kind: 'status'; docId: string; status: 'idle' | 'starting' | 'working' | 'done' | 'error'; detail?: string }
-  | { kind: 'user-echo'; docId: string; threadId: string; itemId: string; text: string; quote?: string }
+  | {
+      kind: 'user-echo'
+      docId: string
+      threadId: string
+      itemId: string
+      text: string
+      quote?: string
+      attachments?: string[]
+    }
   | { kind: 'text-delta'; docId: string; threadId: string; itemId: string; delta: string }
   | { kind: 'assistant-text'; docId: string; threadId: string; itemId: string; text: string }
   | {
@@ -108,6 +116,8 @@ export interface ChatItem {
   role: 'user' | 'assistant'
   text: string
   quote?: string
+  /** file names the user attached to this message */
+  attachments?: string[]
   at: number
   /** tool activity lines shown under an assistant item */
   toolNotes?: { toolId: string; note: string; done?: boolean; ok?: boolean }[]
@@ -151,9 +161,18 @@ export const FONT_CHOICES: FontChoice[] = [
 
 export const DEFAULT_FONT = FONT_CHOICES[0].value
 
+export interface Attachment {
+  /** absolute path to the file on disk */
+  path: string
+  /** file name (basename), shown in the UI */
+  name: string
+}
+
 export interface SendOptions {
   /** When set, Claude's final reply is also appended to this comment thread */
   commentId?: string
   /** Selected text the user is asking about */
   quote?: string
+  /** Files the user attached: images/PDFs are sent inline, others copied into the doc folder */
+  attachments?: Attachment[]
 }

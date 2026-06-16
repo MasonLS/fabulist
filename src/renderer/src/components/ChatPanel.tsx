@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ChatItem, PermissionRequest } from '@shared/types'
+import type { Attachment, ChatItem, PermissionRequest } from '@shared/types'
 import { useStore } from '@/store'
 import DiffView from '@/components/DiffView'
 import Markdown from '@/components/Markdown'
@@ -18,6 +18,8 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
   const interrupt = useStore((s) => s.interrupt)
 
   const [input, setInput] = useState('')
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [dragging, setDragging] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -28,14 +30,52 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
     if (el) el.scrollTop = el.scrollHeight
   }, [chat, permissions])
 
+  const addAttachments = (next: Attachment[]): void => {
+    if (next.length === 0) return
+    setAttachments((cur) => {
+      const seen = new Set(cur.map((a) => a.path))
+      return [...cur, ...next.filter((a) => !seen.has(a.path))]
+    })
+  }
+
+  const pickAttachments = async (): Promise<void> => {
+    const picked = await window.fabulist.agent.pickAttachments()
+    addAttachments(picked)
+  }
+
+  const onDrop = (e: React.DragEvent): void => {
+    e.preventDefault()
+    setDragging(false)
+    if (busy) return
+    const dropped: Attachment[] = Array.from(e.dataTransfer.files).map((f) => ({
+      path: window.fabulist.agent.attachmentPathForFile(f),
+      name: f.name
+    }))
+    addAttachments(dropped.filter((a) => a.path))
+  }
+
   const send = (): void => {
-    if (!input.trim() || busy) return
-    askClaude(input)
+    if (busy || (!input.trim() && attachments.length === 0)) return
+    askClaude(input, attachments.length ? { attachments } : {})
     setInput('')
+    setAttachments([])
   }
 
   return (
-    <div className="chat">
+    <div
+      className={`chat${dragging ? ' chat-dragging' : ''}`}
+      onDragOver={(e) => {
+        if (busy) return
+        e.preventDefault()
+        if (!dragging) setDragging(true)
+      }}
+      onDragLeave={(e) => {
+        // only clear when the pointer actually leaves the panel
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false)
+      }}
+      onDrop={onDrop}
+    >
+      {dragging && <div className="chat-dropzone">Drop files to attach</div>}
       <ThreadBar docId={docId} busy={busy} />
       <div className="chat-scroll" ref={scrollRef}>
         {chat.length === 0 && (
@@ -68,7 +108,31 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
       </div>
 
       <div className="chat-compose">
+        {attachments.length > 0 && (
+          <div className="chat-attachments">
+            {attachments.map((a) => (
+              <span key={a.path} className="attachment-chip" title={a.path}>
+                <span className="attachment-name">{a.name}</span>
+                <button
+                  className="attachment-remove"
+                  title="Remove"
+                  onClick={() => setAttachments((cur) => cur.filter((x) => x.path !== a.path))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="chat-inputrow">
+          <button
+            className="chat-attach"
+            onClick={() => void pickAttachments()}
+            disabled={busy}
+            title="Attach files"
+          >
+            📎
+          </button>
           <textarea
             ref={inputRef}
             rows={Math.min(6, Math.max(1, input.split('\n').length))}
@@ -83,7 +147,12 @@ export default function ChatPanel({ docId }: { docId: string }): React.JSX.Eleme
               }
             }}
           />
-          <button className="chat-send" onClick={send} disabled={busy || !input.trim()} title="Send">
+          <button
+            className="chat-send"
+            onClick={send}
+            disabled={busy || (!input.trim() && attachments.length === 0)}
+            title="Send"
+          >
             ↑
           </button>
         </div>
@@ -288,7 +357,16 @@ function ChatBubble({ item }: { item: ChatItem }): React.JSX.Element {
     return (
       <div className="bubble bubble-user">
         {item.quote && <div className="bubble-quote">“{truncate(item.quote, 160)}”</div>}
-        <div className="bubble-text">{item.text}</div>
+        {item.attachments && item.attachments.length > 0 && (
+          <div className="bubble-attachments">
+            {item.attachments.map((name, i) => (
+              <span key={i} className="attachment-chip attachment-chip-static">
+                <span className="attachment-name">{name}</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {item.text && <div className="bubble-text">{item.text}</div>}
       </div>
     )
   }
