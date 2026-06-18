@@ -30,7 +30,11 @@ export default function App(): React.JSX.Element {
   }, [])
 
   return (
-    <div className={`app ${libraryOpen ? '' : 'library-closed'}`}>
+    <div
+      className={`app ${libraryOpen ? '' : 'library-closed'} ${
+        doc && sidebarOpen ? '' : 'sidebar-closed'
+      }`}
+    >
       <Library />
       <main className="workspace">
         <header className={`workspace-header ${libraryOpen ? '' : 'with-lights'}`}>
@@ -83,7 +87,7 @@ export default function App(): React.JSX.Element {
           <EmptyState />
         )}
       </main>
-      {doc && sidebarOpen && <Sidebar docId={doc.id} />}
+      {doc && <Sidebar docId={doc.id} />}
     </div>
   )
 }

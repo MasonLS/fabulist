@@ -14,6 +14,9 @@ All notable changes to Fabulist are documented here. The format follows
   of blanking out during the async load.
 
 ### Changed
+- The right-hand sidebar now slides open and closed with the same animation as the library
+  rail, instead of popping in and out abruptly. It stays mounted and collapses via an
+  animated grid column.
 - The sidebar toggle in the workspace header is now an icon button (matching the library
   toggle) instead of a "Panel" text label.
 - Removed the thread-count badge from the per-document conversation selector.
