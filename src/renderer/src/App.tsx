@@ -23,7 +23,6 @@ export default function App(): React.JSX.Element {
   const toggleLibrary = useStore((s) => s.toggleLibrary)
   const harness = useStore((s) => s.harness)
   const activePanel = useStore((s) => s.activePanel)
-  const openWorkshop = useStore((s) => s.openWorkshop)
   const setPaletteOpen = useStore((s) => s.setPaletteOpen)
   const panel = harness?.config.panels.find((p) => p.id === activePanel) ?? null
 
@@ -70,31 +69,17 @@ export default function App(): React.JSX.Element {
           </div>
           {projectOpen && (
             <div className="workspace-actions">
-              {doc && !panel && (
+              {agent && agent.status !== 'idle' && agent.status !== 'done' && (
                 <span className="workspace-meta">
-                  {doc.wordCount.toLocaleString()} words
-                  {agent && agent.status !== 'idle' && agent.status !== 'done' && (
-                    <span className={`agent-dot agent-${agent.status}`} />
-                  )}
+                  <span className={`agent-dot agent-${agent.status}`} />
                 </span>
               )}
               <button
-                className="studio-chip"
-                onClick={() => void openWorkshop()}
-                title={
-                  harness?.config.name
-                    ? `${harness.config.description ?? 'Studio defined by fabulist.json'} — click to customize in the workshop`
-                    : "Design this project's studio with the agent — doc types, actions, skills, panels"
-                }
-              >
-                ✦ {harness?.config.name ?? 'Studio'}
-              </button>
-              <button
-                className="btn-ghost"
+                className="btn-ghost btn-with-kbd"
                 onClick={() => setPaletteOpen(true)}
-                title="Actions, skills, documents  ⌘K"
+                title="Actions, skills, documents"
               >
-                Actions
+                Actions <kbd>⌘K</kbd>
               </button>
               {doc && !panel && <FontPicker />}
               <button

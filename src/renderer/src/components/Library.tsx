@@ -143,6 +143,7 @@ function DocsView(): React.JSX.Element {
   const harness = useStore((s) => s.harness)
   const activePanel = useStore((s) => s.activePanel)
   const openPanel = useStore((s) => s.openPanel)
+  const openWorkshop = useStore((s) => s.openWorkshop)
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
   const [typeId, setTypeId] = useState('')
@@ -166,6 +167,26 @@ function DocsView(): React.JSX.Element {
           <path d="M7.5 3 4.5 6l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span className="library-crumb-title">{project?.title ?? 'Project'}</span>
+      </button>
+
+      <button
+        className="library-studio"
+        onClick={() => void openWorkshop()}
+        title={
+          harness?.config.name
+            ? `${harness.config.description ?? 'This project defines its own studio in fabulist.json'}. Open the workshop to change it.`
+            : 'Open the workshop: design a custom studio for this project with the agent — doc types, actions, skills, panels.'
+        }
+      >
+        <span className="library-studio-glyph" aria-hidden>
+          ✦
+        </span>
+        <span className="library-studio-text">
+          <span className="library-studio-name">{harness?.config.name ?? 'No studio yet'}</span>
+          <span className="library-studio-hint">
+            {harness?.config.name ? 'Customize in the workshop' : 'Design one in the workshop'}
+          </span>
+        </span>
       </button>
 
       <div className="library-head">

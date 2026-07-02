@@ -31,11 +31,13 @@ All notable changes to Fabulist are documented here. The format follows
   names the file to match the type's glob and seeds it from the type's template.
 
 ### Changed
-- **The workspace header is calmer.** It now holds only identity and navigation: document tabs,
-  a quiet word count, the studio chip (which opens the workshop), one Actions (⌘K) button, an
-  icon-only typeface picker, and the sidebar toggle. Snapshot moved to the History panel and the
-  palette; the separate Workshop button folded into the studio chip (now always present); harness
-  panels moved out of the tab strip into a **Views** section of the project rail. Studio growth —
+- **The workspace header is calmer.** It now holds only navigation: document tabs, an Actions
+  button with its ⌘K hint, an icon-only typeface picker, and the sidebar toggle (plus the agent
+  status dot while Claude works). Word count and Snapshot left the header (Snapshot lives in the
+  History panel and the palette); harness panels moved out of the tab strip into a **Views**
+  section of the project rail; the studio identity moved to the rail under the project name,
+  where "✦ Novel Studio — customize in the workshop" can actually explain itself (and doubles as
+  the workshop entry, including "No studio yet — design one" for plain projects). Studio growth —
   more actions, panels, doc types — lands in the palette and rail, never widens the header.
 - New projects' `.gitignore` no longer excludes `.claude/` — skills and agent personas are part
   of a shareable studio. Only `.fabulist/`, `.claude/settings.local.json`, and
