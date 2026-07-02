@@ -109,6 +109,10 @@ All notable changes to Fabulist are documented here. The format follows
   automatically into one-document projects, keeping their chat, comments, model, and history.
 
 ### Fixed
+- A project folder that lives inside a larger git repo (a symlinked folder in a dev repo, a
+  monorepo subfolder) no longer gets the *outer* repo staged and committed by Fabulist's
+  auto-snapshots — git operations now require the project folder to be its own repo root, and
+  opening such a folder never nests a new repo inside the enclosing one.
 - Documents in the rail no longer wear a doc-type badge — the type's icon (and the hover
   tooltip) already says it; the badge was noise.
 - Icon buttons (+ and × in the tab strip and rail, the chat send arrow) now center their glyphs
