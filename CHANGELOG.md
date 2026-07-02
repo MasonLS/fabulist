@@ -49,6 +49,12 @@ All notable changes to Fabulist are documented here. The format follows
 - All project-folder signals (harness hot reload, external doc edits/deletions, comment
   changes) now arrive on a single typed `project:event` IPC channel instead of four bespoke
   ones.
+- **Documents can live in folders.** Doc identity is now a project-relative path
+  (`chapters/ch-1.md`), discovered recursively (hidden folders, `attachments/`, and
+  `node_modules/` excluded; top-level `CLAUDE.md`/`AGENTS.md`/`README.md` stay reserved).
+  Doc-type globs may span folders (`chapters/*.scene.md`, `**` crosses depths), typed creation
+  makes the folder and names the file inside it, and external edits/deletions of nested files
+  propagate. Comments, tabs, fonts, and history all key on the relative path.
 - **The workspace header is calmer.** It now holds only navigation: document tabs, an Actions
   button with its ⌘K hint, an icon-only typeface picker, and the sidebar toggle (plus the agent
   status dot while Claude works). Word count and Snapshot left the header (Snapshot lives in the

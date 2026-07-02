@@ -401,7 +401,8 @@ export class AgentManager {
     const fileTools = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])
     let filePath: string | undefined
     if (fileTools.has(tool) && typeof input.file_path === 'string') {
-      filePath = path.relative(cwd, path.resolve(cwd, input.file_path))
+      // posix-normalized so it compares equal to doc ids (nested paths included)
+      filePath = path.relative(cwd, path.resolve(cwd, input.file_path)).split(path.sep).join('/')
     }
 
     // comments.json belongs to the app

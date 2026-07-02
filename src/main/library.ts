@@ -4,7 +4,13 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AgentThread, ChatItem, DocMeta, ProjectMeta } from '@shared/types'
 import { DOC_EXTENSIONS, deriveDocMeta, docTypeForFile, isDocFile } from '@shared/docTypes'
-import { docTypeFor, fileNameForType, type DocTypeDef, type HarnessConfig } from '@shared/harness'
+import {
+  docTypeFor,
+  fileNameForType,
+  isSafeRelPath,
+  type DocTypeDef,
+  type HarnessConfig
+} from '@shared/harness'
 import { initRepo, commitAll } from './git'
 // note: harness.ts imports projectPath back from this module; both sides only
 // touch each other at call time, so the cycle is harmless
@@ -82,12 +88,16 @@ export function projectPath(id: string): string {
   return path.join(LIBRARY_ROOT, id)
 }
 
-/** Absolute path to a doc file within a project, with traversal guarded. */
+/**
+ * Absolute path to a doc file within a project. Doc ids are project-relative
+ * POSIX paths ("chapters/ch-1.md"); traversal, absolute paths, and dot
+ * segments are rejected.
+ */
 export function docPath(projectId: string, docFile: string): string {
-  if (docFile.includes('/') || docFile.includes('\\') || docFile.startsWith('.')) {
+  if (!isSafeRelPath(docFile)) {
     throw new Error(`Invalid document file: ${docFile}`)
   }
-  return path.join(projectPath(projectId), docFile)
+  return path.join(projectPath(projectId), ...docFile.split('/'))
 }
 
 // --- project.json: docs registry, per-doc prefs, open tabs (app state) ---
@@ -108,16 +118,32 @@ function projectJsonPath(projectId: string): string {
   return path.join(projectPath(projectId), STATE_DIR, 'project.json')
 }
 
-// Markdown files that are project machinery, not documents the user authors.
-const RESERVED_FILES = new Set(['CLAUDE.md', 'AGENTS.md'])
+// Top-level markdown files that are project machinery, not documents.
+export const RESERVED_FILES = new Set(['CLAUDE.md', 'AGENTS.md', 'README.md'])
+// Folders that hold app/tool machinery, never documents.
+export const IGNORED_DIRS = new Set(['attachments', 'node_modules'])
+const SCAN_DEPTH = 8
 
+/** All doc files in a project as project-relative POSIX paths, sorted. */
 async function scanDocFiles(projectId: string): Promise<string[]> {
-  const dir = projectPath(projectId)
-  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
-  return entries
-    .filter((e) => e.isFile() && isDocFile(e.name) && !RESERVED_FILES.has(e.name))
-    .map((e) => e.name)
-    .sort()
+  const root = projectPath(projectId)
+  const out: string[] = []
+  const walk = async (rel: string, depth: number): Promise<void> => {
+    const entries = await fs
+      .readdir(rel ? path.join(root, ...rel.split('/')) : root, { withFileTypes: true })
+      .catch(() => [])
+    for (const e of entries) {
+      if (e.name.startsWith('.')) continue
+      const childRel = rel ? `${rel}/${e.name}` : e.name
+      if (e.isDirectory()) {
+        if (depth < SCAN_DEPTH && !IGNORED_DIRS.has(e.name)) await walk(childRel, depth + 1)
+      } else if (e.isFile() && isDocFile(e.name) && !(rel === '' && RESERVED_FILES.has(e.name))) {
+        out.push(childRel)
+      }
+    }
+  }
+  await walk('', 0)
+  return out.sort()
 }
 
 /**
@@ -228,7 +254,10 @@ function frontmatterValue(content: string, key: string): string | undefined {
 /** Title per the harness doc type's titleFrom rule; falls back to the h1 derivation. */
 function titleForType(file: string, content: string, harnessType: DocTypeDef, fallback: string): string {
   const rule = harnessType.titleFrom
-  if (rule === 'filename') return file.replace(/(\.[^.]+)+$/, '')
+  if (rule === 'filename') {
+    const base = file.split('/').pop() ?? file
+    return base.replace(/(\.[^.]+)+$/, '')
+  }
   if (rule?.startsWith('frontmatter:')) {
     return frontmatterValue(content, rule.slice('frontmatter:'.length)) ?? fallback
   }
@@ -375,7 +404,9 @@ export async function createDoc(projectId: string, title: string, typeId?: strin
     const seed = harnessType?.template
       ? harnessType.template.replaceAll('{{title}}', clean)
       : `# ${clean}\n\n`
-    await fs.writeFile(docPath(projectId, file), seed)
+    const full = docPath(projectId, file)
+    await fs.mkdir(path.dirname(full), { recursive: true }) // typed globs may nest
+    await fs.writeFile(full, seed)
     await writeProjectUnlocked(projectId, {
       ...project,
       docs: [...project.docs, { file }],
