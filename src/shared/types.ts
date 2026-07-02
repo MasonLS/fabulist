@@ -128,6 +128,17 @@ export type AgentEvent =
       docFile?: string
     }
 
+/**
+ * Everything the main process observes happening to the open project folder,
+ * on one channel. Adding a signal is a new variant here plus a case in the
+ * store's handleProjectEvent — no new IPC plumbing.
+ */
+export type ProjectEvent =
+  | { kind: 'harness-changed'; projectId: string }
+  | { kind: 'doc-external-change'; projectId: string; docFile: string; content: string }
+  | { kind: 'doc-removed'; projectId: string; docFile: string }
+  | { kind: 'comments-changed'; projectId: string }
+
 /** A named conversation with the agent, scoped to one project. */
 export interface AgentThread {
   id: string

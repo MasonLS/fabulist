@@ -5,63 +5,253 @@
 // hooks, and CLAUDE.md live in their native Claude Code locations; Fabulist
 // discovers and renders them.
 //
+// THE SCHEMA IS SELF-DEFINING. Every field is a row in the descriptor tables
+// below, and everything else derives from them: the lenient parser and its
+// warnings, the schema reference embedded in the workshop agent's prompt
+// (schemaMarkdown), the JSON Schema published for editor autocomplete
+// (jsonSchema), the generated section of docs/harness.md, and the trust hash
+// (fields marked `trust: true`). To add a manifest option, add a row — the
+// agent, the docs, validation, and the trust model pick it up from there.
+//
 // Parsing is deliberately lenient: unknown keys are ignored and malformed
 // entries are dropped with a warning, so a project authored against a newer
 // app version still opens.
 
 export const HARNESS_FILE = 'fabulist.json'
 export const HARNESS_LOCAL_FILE = 'fabulist.local.json'
+export const HARNESS_VERSION = 1
 
-/** A kind of document this studio works with, matched by filename glob. */
+// --- descriptor model ---
+
+export interface FieldSpec {
+  key: string
+  /** enum fields validate against `values`; strings are trimmed non-empty */
+  kind: 'string' | 'enum'
+  values?: readonly string[]
+  required?: boolean
+  /** one-line description; feeds the workshop prompt, docs, and JSON Schema */
+  doc: string
+  /** example value rendered into the schema example (JSON literal) */
+  example?: string
+  /** hard cap on string length (e.g. rail icons) */
+  maxLen?: number
+  /** participates in the trust hash — changing it re-prompts the user */
+  trust?: boolean
+  /** allow multi-line/untrimmed strings (templates) */
+  raw?: boolean
+}
+
+interface ListBlockSpec<T> {
+  key: string
+  doc: string
+  fields: FieldSpec[]
+  /** shape-level validation + defaults after field parsing; null drops the entry */
+  finalize: (entry: Record<string, string | undefined>, warn: (msg: string) => void) => T | null
+}
+
+// --- shared validation helpers ---
+
+export function slugId(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+/** A safe project-relative path: no traversal, no absolute, no dot segments. */
+export function isSafeRelPath(p: string): boolean {
+  if (!p || p.startsWith('/') || p.includes('\\')) return false
+  return p.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..' && !seg.startsWith('.'))
+}
+
+/** Globs are safe rel-paths where `*`, `?`, and `**` segments are allowed. */
+function isSafeGlob(p: string): boolean {
+  if (!p || p.startsWith('/') || p.includes('\\')) return false
+  return p
+    .split('/')
+    .every((seg) => seg !== '' && seg !== '.' && seg !== '..' && (seg === '**' || !seg.startsWith('.')))
+}
+
+// --- the schema, as data ---
+
+export type ActionSurface = 'selection' | 'doc' | 'project'
+export type PanelViewKind = 'markdown'
+
 export interface DocTypeDef {
   id: string
-  /** filename glob, e.g. "*.scene.md" or "chapter-*.md" (top-level files only) */
   match: string
-  /** human label shown in the rail, e.g. "Scene" */
   label?: string
-  /** rail glyph — a single character or emoji */
   icon?: string
-  /** how to derive the doc title: 'h1' (default), 'filename', or 'frontmatter:<key>' */
   titleFrom?: string
-  /** seed content for new docs of this type; {{title}} is substituted */
   template?: string
 }
 
-export type ActionSurface = 'selection' | 'doc' | 'project'
-
-/** A command surfaced in the palette / toolbar. Runs a skill, a canned prompt, or both. */
 export interface ActionDef {
   id: string
   label: string
-  /** what the action operates on; selection actions need highlighted text */
   surface: ActionSurface
-  /** name of a .claude/skills entry to invoke */
   skill?: string
-  /** instructions sent to the agent (alongside or instead of a skill) */
   prompt?: string
 }
 
-/** A read-only view over a project file, rendered as a workspace tab. */
 export interface PanelDef {
   id: string
   title: string
-  /** top-level markdown file to render, e.g. "bible.md" */
   source: string
+  view: PanelViewKind
 }
 
-/**
- * The permission profile requested by the manifest. `edits: 'auto'` only takes
- * effect once the user explicitly trusts the studio (trust is stored outside
- * the repo and keyed to this block's content). `bash: 'deny'` is applied
- * unconditionally — a manifest may always tighten the gate, never loosen it
- * without consent.
- */
 export interface PermissionsDef {
   edits?: 'ask' | 'auto'
   bash?: 'ask' | 'deny'
 }
 
-/** The parsed manifest — everything optional; an empty object is valid. */
+export const DOC_TYPES_BLOCK: ListBlockSpec<DocTypeDef> = {
+  key: 'docTypes',
+  doc: 'Kinds of documents this studio works with, matched by filename glob. A matching doc gets the icon and label in the rail, its title derived per titleFrom, and a card in the New Document dialog (the filename follows the glob, the template seeds the content).',
+  fields: [
+    { key: 'id', kind: 'string', required: true, doc: 'stable identifier', example: '"scene"' },
+    {
+      key: 'match',
+      kind: 'string',
+      required: true,
+      doc: 'project-relative filename glob; * and ? stay within one path segment, ** spans folders',
+      example: '"chapters/*.scene.md"'
+    },
+    { key: 'label', kind: 'string', doc: 'display label; defaults to the id', example: '"Scene"' },
+    { key: 'icon', kind: 'string', maxLen: 2, doc: '1–2 characters/emoji shown in the document rail', example: '"🎬"' },
+    {
+      key: 'titleFrom',
+      kind: 'string',
+      doc: '"h1" (default), "filename", or "frontmatter:<key>"',
+      example: '"frontmatter:title"'
+    },
+    {
+      key: 'template',
+      kind: 'string',
+      raw: true,
+      doc: 'seed content for new docs of this type; {{title}} is substituted',
+      example: '"---\\ntitle: {{title}}\\n---\\n\\n"'
+    }
+  ],
+  finalize: (e, warn) => {
+    if (!e.id || !e.match) return null
+    if (!isSafeGlob(e.match)) {
+      warn(`docType "${e.id}": match "${e.match}" must be a safe project-relative glob; skipped`)
+      return null
+    }
+    let titleFrom = e.titleFrom
+    if (titleFrom && titleFrom !== 'h1' && titleFrom !== 'filename' && !titleFrom.startsWith('frontmatter:')) {
+      warn(`docType "${e.id}": unknown titleFrom "${titleFrom}"; using h1`)
+      titleFrom = undefined
+    }
+    return { id: e.id, match: e.match, label: e.label, icon: e.icon, titleFrom, template: e.template }
+  }
+}
+
+export const ACTIONS_BLOCK: ListBlockSpec<ActionDef> = {
+  key: 'actions',
+  doc: 'Commands surfaced in the ⌘K palette (and, for surface "selection", in the highlight toolbar). An action runs a .claude/skills skill, sends a canned prompt, or both.',
+  fields: [
+    { key: 'id', kind: 'string', doc: 'stable identifier; defaults to a slug of the label', example: '"punch-up"' },
+    { key: 'label', kind: 'string', doc: 'palette label (required unless a skill names it)', example: '"Punch up dialogue"' },
+    {
+      key: 'surface',
+      kind: 'enum',
+      values: ['selection', 'doc', 'project'],
+      doc: 'what the action operates on; "selection" needs highlighted text',
+      example: '"selection"'
+    },
+    { key: 'skill', kind: 'string', doc: 'a .claude/skills name to invoke', example: '"punch-up-dialogue"' },
+    {
+      key: 'prompt',
+      kind: 'string',
+      raw: true,
+      doc: 'instructions sent to the writing agent (alongside or instead of the skill)',
+      example: '"Sharpen this dialogue without changing what is said."'
+    }
+  ],
+  finalize: (e, warn) => {
+    const label = e.label ?? e.skill
+    if (!label || (!e.skill && !e.prompt)) {
+      warn(`an action needs a "label" plus a "skill" or "prompt"; skipped`)
+      return null
+    }
+    return {
+      id: e.id ?? slugId(label),
+      label,
+      surface: (e.surface as ActionSurface) ?? 'project',
+      skill: e.skill,
+      prompt: e.prompt
+    }
+  }
+}
+
+export const PANELS_BLOCK: ListBlockSpec<PanelDef> = {
+  key: 'panels',
+  doc: 'Read-only rendered views over project files, opened as ▦ tabs from the rail or palette.',
+  fields: [
+    { key: 'id', kind: 'string', doc: 'stable identifier; defaults to a slug of the title', example: '"bible"' },
+    { key: 'title', kind: 'string', required: true, doc: 'tab and rail label', example: '"Story Bible"' },
+    {
+      key: 'source',
+      kind: 'string',
+      required: true,
+      doc: 'project-relative markdown file to render',
+      example: '"bible.md"'
+    },
+    {
+      key: 'view',
+      kind: 'enum',
+      values: ['markdown'],
+      doc: 'how the source is rendered; only "markdown" today',
+      example: '"markdown"'
+    }
+  ],
+  finalize: (e, warn) => {
+    if (!e.title || !e.source) return null
+    if (!isSafeRelPath(e.source)) {
+      warn(`panel "${e.title}": source must be a safe project-relative path; skipped`)
+      return null
+    }
+    return {
+      id: e.id ?? slugId(e.title),
+      title: e.title,
+      source: e.source,
+      view: (e.view as PanelViewKind) ?? 'markdown'
+    }
+  }
+}
+
+/** permissions is a single object, not a list; same field machinery. */
+export const PERMISSION_FIELDS: FieldSpec[] = [
+  {
+    key: 'edits',
+    kind: 'enum',
+    values: ['ask', 'auto'],
+    trust: true,
+    doc: '"auto" applies the agent\'s file edits without per-edit approval; only takes effect after the user explicitly trusts the studio in the app',
+    example: '"ask"'
+  },
+  {
+    key: 'bash',
+    kind: 'enum',
+    values: ['ask', 'deny'],
+    doc: '"deny" removes the shell tool from the agent entirely (tightening never needs trust)',
+    example: '"ask"'
+  }
+]
+
+export const TOP_LEVEL_FIELDS: FieldSpec[] = [
+  { key: 'name', kind: 'string', doc: 'studio name, shown in the rail and project list', example: '"Novel Studio"' },
+  { key: 'description', kind: 'string', doc: 'one line about the studio', example: '"Long-form fiction with continuity checking"' },
+  { key: 'version', kind: 'string', doc: `manifest schema version; currently ${HARNESS_VERSION}`, example: `${HARNESS_VERSION}` }
+]
+
+export const LIST_BLOCKS = [DOC_TYPES_BLOCK, ACTIONS_BLOCK, PANELS_BLOCK] as const
+
+// --- parsed shape ---
+
 export interface HarnessConfig {
   name?: string
   description?: string
@@ -104,55 +294,57 @@ export const EMPTY_HARNESS: Harness = {
   warnings: []
 }
 
-/** Does the profile ask for anything beyond the default always-ask gate? */
-export function wantsElevatedPermissions(config: HarnessConfig): boolean {
-  return config.permissions.edits === 'auto'
-}
+// --- descriptor-driven parsing ---
 
-// --- glob matching (single-segment: * and ? only, no directories) ---
-
-export function globMatch(pattern: string, file: string): boolean {
-  if (pattern.includes('/') || pattern.includes('\\')) return false
-  const rx = pattern
-    .split('')
-    .map((ch) => {
-      if (ch === '*') return '[^/]*'
-      if (ch === '?') return '[^/]'
-      return ch.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    })
-    .join('')
-  return new RegExp(`^${rx}$`, 'i').test(file)
-}
-
-/** The first doc type whose glob matches the filename, if any. */
-export function docTypeFor(config: HarnessConfig, file: string): DocTypeDef | null {
-  return config.docTypes.find((t) => globMatch(t.match, file)) ?? null
-}
-
-/**
- * Derive a filename for a new doc of a type from its glob: the `*` is replaced
- * with the slug ("*.scene.md" + "Cold Open" → "cold-open.scene.md"). Globs
- * without a single `*` fall back to `<slug>.md`.
- */
-export function fileNameForType(type: DocTypeDef, slug: string): string {
-  const stars = type.match.split('*')
-  if (stars.length === 2 && !type.match.includes('?')) {
-    return `${stars[0]}${slug}${stars[1]}`
+function parseField(spec: FieldSpec, value: unknown, warn: (msg: string) => void, at: string): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') {
+    // tolerate numbers for fields like version
+    if (typeof value === 'number') return String(value)
+    warn(`${at}.${spec.key} must be a string`)
+    return undefined
   }
-  return `${slug}.md`
+  const v = spec.raw ? value : value.trim()
+  if (!v) return undefined
+  if (spec.kind === 'enum' && !spec.values?.includes(v)) {
+    warn(`${at}.${spec.key} must be one of ${spec.values?.map((x) => `"${x}"`).join(', ')}`)
+    return undefined
+  }
+  return spec.maxLen ? v.slice(0, spec.maxLen) : v
 }
 
-// --- lenient parsing ---
-
-function asString(v: unknown): string | undefined {
-  return typeof v === 'string' && v.trim() ? v.trim() : undefined
-}
-
-function slugId(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+function parseListBlock<T>(
+  block: ListBlockSpec<T>,
+  raw: unknown,
+  warnings: string[]
+): T[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    warnings.push(`${block.key} must be an array`)
+    return []
+  }
+  const out: T[] = []
+  for (const [i, item] of (raw as unknown[]).entries()) {
+    const at = `${block.key}[${i}]`
+    if (typeof item !== 'object' || item === null) {
+      warnings.push(`${at} must be an object; skipped`)
+      continue
+    }
+    const obj = item as Record<string, unknown>
+    const entry: Record<string, string | undefined> = {}
+    let missing = false
+    for (const f of block.fields) {
+      entry[f.key] = parseField(f, obj[f.key], (m) => warnings.push(m), at)
+      if (f.required && entry[f.key] === undefined) {
+        warnings.push(`${at} needs "${f.key}"; skipped`)
+        missing = true
+      }
+    }
+    if (missing) continue
+    const finalized = block.finalize(entry, (m) => warnings.push(m))
+    if (finalized !== null) out.push(finalized)
+  }
+  return out
 }
 
 /**
@@ -165,115 +357,43 @@ export function parseHarnessConfig(raw: unknown, warnings: string[]): HarnessCon
     return { ...EMPTY_CONFIG }
   }
   const obj = raw as Record<string, unknown>
-  const config: HarnessConfig = {
-    name: asString(obj.name),
-    description: asString(obj.description),
-    docTypes: [],
-    actions: [],
-    panels: [],
-    permissions: {}
+
+  const top: Record<string, string | undefined> = {}
+  for (const f of TOP_LEVEL_FIELDS) {
+    top[f.key] = parseField(f, obj[f.key], (m) => warnings.push(m), 'fabulist.json')
+  }
+  if (top.version && Number(top.version) > HARNESS_VERSION) {
+    warnings.push(`manifest version ${top.version} is newer than this app understands (${HARNESS_VERSION}); unknown options are ignored`)
   }
 
-  if (obj.docTypes !== undefined) {
-    if (!Array.isArray(obj.docTypes)) warnings.push('docTypes must be an array')
-    else
-      for (const [i, t] of (obj.docTypes as unknown[]).entries()) {
-        const d = t as Record<string, unknown>
-        const id = asString(d?.id)
-        const match = asString(d?.match)
-        if (!id || !match) {
-          warnings.push(`docTypes[${i}] needs "id" and "match"; skipped`)
-          continue
-        }
-        if (match.includes('/') || match.includes('\\')) {
-          warnings.push(`docTypes[${i}] "${id}": nested paths are not supported yet; skipped`)
-          continue
-        }
-        const titleFrom = asString(d.titleFrom)
-        if (titleFrom && titleFrom !== 'h1' && titleFrom !== 'filename' && !titleFrom.startsWith('frontmatter:')) {
-          warnings.push(`docTypes[${i}] "${id}": unknown titleFrom "${titleFrom}"; using h1`)
-        }
-        config.docTypes.push({
-          id,
-          match,
-          label: asString(d.label),
-          icon: asString(d.icon)?.slice(0, 2),
-          titleFrom:
-            titleFrom === 'h1' || titleFrom === 'filename' || titleFrom?.startsWith('frontmatter:')
-              ? titleFrom
-              : undefined,
-          template: typeof d.template === 'string' ? d.template : undefined
-        })
-      }
-  }
-
-  if (obj.actions !== undefined) {
-    if (!Array.isArray(obj.actions)) warnings.push('actions must be an array')
-    else
-      for (const [i, a] of (obj.actions as unknown[]).entries()) {
-        const d = a as Record<string, unknown>
-        const skill = asString(d?.skill)
-        const prompt = asString(d?.prompt)
-        const label = asString(d?.label) ?? skill
-        if (!label || (!skill && !prompt)) {
-          warnings.push(`actions[${i}] needs a "label" plus a "skill" or "prompt"; skipped`)
-          continue
-        }
-        const surface = asString(d.surface)
-        if (surface && !['selection', 'doc', 'project'].includes(surface)) {
-          warnings.push(`actions[${i}] "${label}": unknown surface "${surface}"; using "project"`)
-        }
-        config.actions.push({
-          id: asString(d.id) ?? slugId(label),
-          label,
-          surface: surface === 'selection' || surface === 'doc' ? surface : 'project',
-          skill,
-          prompt
-        })
-      }
-  }
-
-  if (obj.panels !== undefined) {
-    if (!Array.isArray(obj.panels)) warnings.push('panels must be an array')
-    else
-      for (const [i, p] of (obj.panels as unknown[]).entries()) {
-        const d = p as Record<string, unknown>
-        const title = asString(d?.title)
-        const source = asString(d?.source)
-        if (!title || !source) {
-          warnings.push(`panels[${i}] needs "title" and "source"; skipped`)
-          continue
-        }
-        if (source.includes('/') || source.includes('\\') || source.startsWith('.')) {
-          warnings.push(`panels[${i}] "${title}": source must be a top-level file; skipped`)
-          continue
-        }
-        config.panels.push({ id: asString(d.id) ?? slugId(title), title, source })
-      }
-  }
-
+  const permissions: PermissionsDef = {}
   if (obj.permissions !== undefined) {
-    const d = obj.permissions as Record<string, unknown>
-    if (typeof d !== 'object' || d === null) warnings.push('permissions must be an object')
-    else {
-      if (d.edits !== undefined) {
-        if (d.edits === 'ask' || d.edits === 'auto') config.permissions.edits = d.edits
-        else warnings.push(`permissions.edits must be "ask" or "auto"`)
-      }
-      if (d.bash !== undefined) {
-        if (d.bash === 'ask' || d.bash === 'deny') config.permissions.bash = d.bash
-        else warnings.push(`permissions.bash must be "ask" or "deny"`)
+    if (typeof obj.permissions !== 'object' || obj.permissions === null) {
+      warnings.push('permissions must be an object')
+    } else {
+      const p = obj.permissions as Record<string, unknown>
+      for (const f of PERMISSION_FIELDS) {
+        const v = parseField(f, p[f.key], (m) => warnings.push(m), 'permissions')
+        if (v !== undefined) (permissions as Record<string, string>)[f.key] = v
       }
     }
   }
 
-  return config
+  return {
+    name: top.name,
+    description: top.description,
+    docTypes: parseListBlock(DOC_TYPES_BLOCK, obj.docTypes, warnings),
+    actions: parseListBlock(ACTIONS_BLOCK, obj.actions, warnings),
+    panels: parseListBlock(PANELS_BLOCK, obj.panels, warnings),
+    permissions
+  }
 }
 
 /**
  * Overlay a personal fabulist.local.json onto the shared config. Scalars are
  * replaced; list entries with a matching id replace their shared counterpart,
- * others are appended. Permissions from the overlay win.
+ * others are appended. The overlay can never touch permissions — that block
+ * is trust-gated to the shared, checked-in manifest.
  */
 export function mergeHarnessConfigs(base: HarnessConfig, local: HarnessConfig): HarnessConfig {
   const mergeList = <T extends { id: string }>(a: T[], b: T[]): T[] => [
@@ -286,6 +406,142 @@ export function mergeHarnessConfigs(base: HarnessConfig, local: HarnessConfig): 
     docTypes: mergeList(base.docTypes, local.docTypes),
     actions: mergeList(base.actions, local.actions),
     panels: mergeList(base.panels, local.panels),
-    permissions: { ...base.permissions, ...local.permissions }
+    permissions: base.permissions
+  }
+}
+
+// --- trust ---
+
+/**
+ * The exact grant surface the user consents to: every permission field marked
+ * `trust: true`, with defaults filled in. Hash this to key stored trust — any
+ * new trust-relevant field added to the descriptor automatically re-prompts.
+ */
+export function trustGrantSnapshot(config: HarnessConfig): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const f of PERMISSION_FIELDS) {
+    if (!f.trust) continue
+    out[f.key] = (config.permissions as Record<string, string | undefined>)[f.key] ?? f.values![0]
+  }
+  return out
+}
+
+/** Does the profile ask for anything beyond the default always-ask gate? */
+export function wantsElevatedPermissions(config: HarnessConfig): boolean {
+  return Object.entries(trustGrantSnapshot(config)).some(([key, value]) => {
+    const spec = PERMISSION_FIELDS.find((f) => f.key === key)!
+    return value !== spec.values![0]
+  })
+}
+
+// --- glob matching ---
+
+const escapeRx = (s: string): string => s.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * Convert a manifest glob to a regex over project-relative paths:
+ * `*` and `?` stay within one path segment; a `**` segment spans any depth.
+ */
+export function globToRegExp(pattern: string): RegExp {
+  const segs = pattern.split('/')
+  let rx = '^'
+  segs.forEach((seg, i) => {
+    const last = i === segs.length - 1
+    if (seg === '**') {
+      rx += last ? '.*' : '(?:.*/)?'
+      return
+    }
+    rx += seg
+      .split('')
+      .map((ch) => (ch === '*' ? '[^/]*' : ch === '?' ? '[^/]' : escapeRx(ch)))
+      .join('')
+    if (!last) rx += '/'
+  })
+  return new RegExp(rx + '$', 'i')
+}
+
+export function globMatch(pattern: string, file: string): boolean {
+  if (pattern.includes('\\')) return false
+  return globToRegExp(pattern).test(file)
+}
+
+/** The first doc type whose glob matches the file path, if any. */
+export function docTypeFor(config: HarnessConfig, file: string): DocTypeDef | null {
+  return config.docTypes.find((t) => globMatch(t.match, file)) ?? null
+}
+
+/**
+ * Derive a filename for a new doc of a type from its glob: the single `*` is
+ * replaced with the slug ("chapters/*.scene.md" + "Cold Open" →
+ * "chapters/cold-open.scene.md"). Anything fancier falls back to `<slug>.md`.
+ */
+export function fileNameForType(type: DocTypeDef, slug: string): string {
+  const stars = type.match.split('*')
+  if (stars.length === 2 && !type.match.includes('?')) {
+    return `${stars[0]}${slug}${stars[1]}`
+  }
+  return `${slug}.md`
+}
+
+// --- generated artifacts: workshop prompt schema, docs section, JSON Schema ---
+
+function fieldLine(f: FieldSpec): string {
+  const req = f.required ? ' (required)' : ''
+  const en = f.kind === 'enum' ? ` — one of ${f.values!.map((v) => `"${v}"`).join(' | ')}` : ''
+  return `  - \`${f.key}\`${req}: ${f.doc}${en}${f.example ? ` — e.g. ${f.example}` : ''}`
+}
+
+/**
+ * The manifest schema as markdown — embedded verbatim in the workshop agent's
+ * system prompt and in the generated section of docs/harness.md, so neither
+ * can drift from the parser.
+ */
+export function schemaMarkdown(): string {
+  const lines: string[] = []
+  lines.push('Top-level fields (all optional; unknown fields are ignored):')
+  for (const f of TOP_LEVEL_FIELDS) lines.push(fieldLine(f))
+  for (const block of LIST_BLOCKS) {
+    lines.push('', `\`${block.key}\` — ${block.doc}`)
+    for (const f of block.fields) lines.push(fieldLine(f))
+  }
+  lines.push('', '`permissions` — the gate profile. A manifest can always tighten the gate; loosening requires explicit user trust in the app, stored outside the repo and keyed to the trust-relevant fields, so any change re-prompts.')
+  for (const f of PERMISSION_FIELDS) lines.push(fieldLine(f))
+  return lines.join('\n')
+}
+
+/** JSON Schema (draft-07) for fabulist.json, for editor autocomplete. */
+export function jsonSchema(): Record<string, unknown> {
+  const fieldSchema = (f: FieldSpec): Record<string, unknown> => ({
+    ...(f.kind === 'enum' ? { enum: [...f.values!] } : { type: 'string' }),
+    description: f.doc,
+    ...(f.maxLen ? { maxLength: f.maxLen } : {})
+  })
+  const listSchema = (block: ListBlockSpec<unknown>): Record<string, unknown> => ({
+    type: 'array',
+    description: block.doc,
+    items: {
+      type: 'object',
+      properties: Object.fromEntries(block.fields.map((f) => [f.key, fieldSchema(f)])),
+      required: block.fields.filter((f) => f.required).map((f) => f.key),
+      additionalProperties: true
+    }
+  })
+  return {
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: 'Fabulist studio manifest (fabulist.json)',
+    type: 'object',
+    properties: {
+      ...Object.fromEntries(
+        TOP_LEVEL_FIELDS.map((f) => [f.key, f.key === 'version' ? { type: ['string', 'number'], description: f.doc } : fieldSchema(f)])
+      ),
+      ...Object.fromEntries(LIST_BLOCKS.map((b) => [b.key, listSchema(b as ListBlockSpec<unknown>)])),
+      permissions: {
+        type: 'object',
+        description: 'Gate profile; loosening grants requires user trust in the app.',
+        properties: Object.fromEntries(PERMISSION_FIELDS.map((f) => [f.key, fieldSchema(f)])),
+        additionalProperties: true
+      }
+    },
+    additionalProperties: true
   }
 }

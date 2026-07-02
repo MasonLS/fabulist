@@ -34,6 +34,21 @@ All notable changes to Fabulist are documented here. The format follows
   names the file to match the type's glob and seeds it from the type's template.
 
 ### Changed
+- **The manifest schema now defines itself.** `fabulist.json`'s shape lives in one set of
+  descriptor tables (`src/shared/harness.ts`); the parser, the workshop agent's schema
+  reference, the generated section of `docs/harness.md`, a published JSON Schema
+  (`docs/fabulist.schema.json` — point `"$schema"` at it for editor autocomplete), and the
+  trust hash all derive from it. Adding a manifest option is one row; a new permission grant
+  automatically re-prompts trust; a vitest suite pins the lenient-parsing contract and fails if
+  the generated artifacts drift (`npm run gen:schema` regenerates). Manifests may also declare
+  a `version`; newer-than-app versions warn instead of failing.
+- Panel view kinds, action surfaces, and palette command groups are now registries — adding a
+  panel kind, a surface, or a command source is a table row plus a component, not a rewrite.
+  Panels gained an explicit `view` field (only `"markdown"` today); unknown kinds render a
+  friendly "update the app" notice instead of breaking.
+- All project-folder signals (harness hot reload, external doc edits/deletions, comment
+  changes) now arrive on a single typed `project:event` IPC channel instead of four bespoke
+  ones.
 - **The workspace header is calmer.** It now holds only navigation: document tabs, an Actions
   button with its ⌘K hint, an icon-only typeface picker, and the sidebar toggle (plus the agent
   status dot while Claude works). Word count and Snapshot left the header (Snapshot lives in the

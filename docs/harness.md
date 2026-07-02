@@ -22,81 +22,77 @@ there:
 
 ## Schema
 
-Every field is optional; unknown fields are ignored; malformed entries are
-dropped with a warning shown in the app. An empty object is a valid manifest.
+The schema is defined once, as descriptor tables in `src/shared/harness.ts`;
+the parser, the workshop agent's prompt, the JSON Schema
+(`docs/fabulist.schema.json`, point `"$schema"` at it for editor
+autocomplete), and the reference below are all generated from those tables.
+Parsing is lenient: every field is optional, unknown fields are ignored, and
+malformed entries are dropped with a warning shown in the app.
 
-```jsonc
-{
-  "name": "Novel Studio",              // shown as a chip in the header and rail
-  "description": "Long-form fiction with continuity checking",
+<!-- generated:schema:start (npm run gen:schema) -->
 
-  "docTypes": [
-    {
-      "id": "scene",                   // required
-      "match": "*.scene.md",          // required — filename glob, top-level files only
-      "label": "Scene",               // rail badge; defaults to the id
-      "icon": "S",                    // 1–2 chars/emoji, replaces the rail glyph
-      "titleFrom": "h1",              // "h1" (default) | "filename" | "frontmatter:<key>"
-      "template": "---\npov: \n---\n\n# {{title}}\n\n"   // seeds new docs of this type
-    }
-  ],
+Top-level fields (all optional; unknown fields are ignored):
+  - `name`: studio name, shown in the rail and project list — e.g. "Novel Studio"
+  - `description`: one line about the studio — e.g. "Long-form fiction with continuity checking"
+  - `version`: manifest schema version; currently 1 — e.g. 1
 
-  "actions": [
-    {
-      "id": "punch-up",               // optional; derived from the label
-      "label": "Punch up dialogue",    // required — appears in the ⌘K palette
-      "surface": "selection",         // "selection" | "doc" | "project" (default)
-      "skill": "punch-up-dialogue",   // a .claude/skills name to invoke, and/or:
-      "prompt": "Sharpen this dialogue without changing what's said."
-    }
-  ],
+`docTypes` — Kinds of documents this studio works with, matched by filename glob. A matching doc gets the icon and label in the rail, its title derived per titleFrom, and a card in the New Document dialog (the filename follows the glob, the template seeds the content).
+  - `id` (required): stable identifier — e.g. "scene"
+  - `match` (required): project-relative filename glob; * and ? stay within one path segment, ** spans folders — e.g. "chapters/*.scene.md"
+  - `label`: display label; defaults to the id — e.g. "Scene"
+  - `icon`: 1–2 characters/emoji shown in the document rail — e.g. "🎬"
+  - `titleFrom`: "h1" (default), "filename", or "frontmatter:<key>" — e.g. "frontmatter:title"
+  - `template`: seed content for new docs of this type; {{title}} is substituted — e.g. "---\ntitle: {{title}}\n---\n\n"
 
-  "panels": [
-    // read-only rendered views of top-level markdown files, shown as tabs
-    { "id": "bible", "title": "Story Bible", "source": "bible.md" }
-  ],
+`actions` — Commands surfaced in the ⌘K palette (and, for surface "selection", in the highlight toolbar). An action runs a .claude/skills skill, sends a canned prompt, or both.
+  - `id`: stable identifier; defaults to a slug of the label — e.g. "punch-up"
+  - `label`: palette label (required unless a skill names it) — e.g. "Punch up dialogue"
+  - `surface`: what the action operates on; "selection" needs highlighted text — one of "selection" | "doc" | "project" — e.g. "selection"
+  - `skill`: a .claude/skills name to invoke — e.g. "punch-up-dialogue"
+  - `prompt`: instructions sent to the writing agent (alongside or instead of the skill) — e.g. "Sharpen this dialogue without changing what is said."
 
-  "permissions": {
-    "edits": "ask",                   // "ask" (default) | "auto"
-    "bash": "ask"                     // "ask" (default) | "deny"
-  }
-}
-```
+`panels` — Read-only rendered views over project files, opened as ▦ tabs from the rail or palette.
+  - `id`: stable identifier; defaults to a slug of the title — e.g. "bible"
+  - `title` (required): tab and rail label — e.g. "Story Bible"
+  - `source` (required): project-relative markdown file to render — e.g. "bible.md"
+  - `view`: how the source is rendered; only "markdown" today — one of "markdown" — e.g. "markdown"
 
-### Doc types
+`permissions` — the gate profile. A manifest can always tighten the gate; loosening requires explicit user trust in the app, stored outside the repo and keyed to the trust-relevant fields, so any change re-prompts.
+  - `edits`: "auto" applies the agent's file edits without per-edit approval; only takes effect after the user explicitly trusts the studio in the app — one of "ask" | "auto" — e.g. "ask"
+  - `bash`: "deny" removes the shell tool from the agent entirely (tightening never needs trust) — one of "ask" | "deny" — e.g. "ask"
 
-`match` globs against top-level filenames (`*` and `?`, no directories). A
-matching doc gets the type's icon and label in the rail, its title derived per
-`titleFrom` (frontmatter blocks are stripped before `h1` derivation), and the
-"new document" pickers offer the type — the filename follows the glob
-(`*.scene.md` + "Cold Open" → `cold-open.scene.md`) and `template` seeds the
-content with `{{title}}` substituted.
+<!-- generated:schema:end -->
 
-### Actions
+## Behavior notes
 
-Actions run through the project's writing agent. `skill` asks the agent to
-invoke that skill; `prompt` sends instructions; with both, the skill is invoked
-with the prompt as guidance. `surface: "selection"` attaches the current editor
-selection as a quoted passage (and is disabled in the palette without one);
-`surface: "doc"` targets the focused document. Skills that aren't referenced by
-any action still appear in the palette under **Skills**.
+**Doc types.** A matching doc gets the type's icon and label in the rail, its
+title derived per `titleFrom` (frontmatter blocks are stripped before `h1`
+derivation), and a card in the New Document dialog — the filename follows the
+glob (`chapters/*.scene.md` + "Cold Open" → `chapters/cold-open.scene.md`) and
+`template` seeds the content with `{{title}}` substituted.
 
-### Permissions and trust
+**Actions.** Actions run through the project's writing agent. `skill` asks the
+agent to invoke that skill; `prompt` sends instructions; with both, the skill
+is invoked with the prompt as guidance. `surface: "selection"` actions appear
+in the highlight toolbar next to Comment and attach the selected passage;
+`surface: "doc"` targets the focused document. Skills not referenced by any
+action still appear in the ⌘K palette under **Skills**.
 
-A manifest can always *tighten* the gate (`"bash": "deny"` applies
-unconditionally). Loosening it — `"edits": "auto"`, which applies the agent's
-file edits without per-edit approval — only takes effect after the user accepts
-the studio in the app. That acceptance is stored **outside the repo** (in the
-app's user data), keyed to a hash of the permissions block: a cloned project
-can't grant itself anything, and any change to the block — including by the
-agent — drops back to untrusted until re-accepted. `fabulist.local.json` may
-override looks but never permissions.
+**Permissions and trust.** A manifest can always *tighten* the gate
+(`"bash": "deny"` applies unconditionally). Loosening it — `"edits": "auto"` —
+only takes effect after the user accepts the studio in the app. That acceptance
+is stored **outside the repo** (in the app's user data), keyed to a hash of the
+trust-relevant fields: a cloned project can't grant itself anything, any change
+to those fields — including by the agent — drops back to untrusted until
+re-accepted, and a *new* grant added to the schema re-prompts automatically.
+`fabulist.local.json` may override looks but never permissions.
 
 ## The workshop
 
-The **Workshop** button opens a dedicated agent conversation whose system
-prompt carries this schema. Describe the work — "this is a D&D campaign; I
-keep session notes and NPC sheets" — and the agent interviews you, then writes
+The **workshop** (open it from the studio entry in the rail, or "Customize
+studio…" in the palette) is a dedicated agent conversation whose system prompt
+carries this schema. Describe the work — "this is a D&D campaign; I keep
+session notes and NPC sheets" — and the agent interviews you, then writes
 `fabulist.json`, skills, and CLAUDE.md itself. Every edit goes through the
 normal approval flow, and the UI grows the new buttons as soon as the edits
 land.

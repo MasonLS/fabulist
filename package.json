@@ -28,6 +28,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "gen:schema": "tsx scripts/gen-harness-schema.ts",
     "start": "electron-vite preview",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
@@ -61,8 +63,10 @@
     "electron": "^42.4.0",
     "electron-builder": "^26.15.2",
     "electron-vite": "^5.0.0",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vite": "^7.3.4",
+    "vitest": "^4.1.9",
     "ws": "^8.21.0"
   }
 }

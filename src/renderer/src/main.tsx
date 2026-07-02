@@ -16,20 +16,9 @@ import { useStore } from './store'
 const store = useStore.getState()
 
 window.fabulist.agent.onEvent((e) => useStore.getState().handleAgentEvent(e))
-window.fabulist.doc.onExternalChange((id, docFile, content) =>
-  useStore.getState().handleExternalChange(id, docFile, content)
-)
-window.fabulist.doc.onRemoved((id, docFile) => useStore.getState().handleDocRemoved(id, docFile))
-window.fabulist.comments.onChanged((id) => {
-  if (useStore.getState().activeProjectId === id) useStore.getState().reloadThreads()
-})
-// harness hot reload: fabulist.json / .claude changes re-render the studio in place
-window.fabulist.harness.onChanged((id) => {
-  const s = useStore.getState()
-  if (s.activeProjectId !== id) return
-  void s.loadHarness()
-  void s.loadDocs() // doc kinds/titles may derive from the manifest
-})
+// everything the main process observes on the open project folder — doc edits,
+// deletions, comment changes, harness hot reloads — arrives on one channel
+window.fabulist.project.onEvent((e) => useStore.getState().handleProjectEvent(e))
 
 window.addEventListener('beforeunload', () => {
   const { activeProjectId } = useStore.getState()

@@ -1,0 +1,150 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fabulist studio manifest (fabulist.json)",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "studio name, shown in the rail and project list"
+    },
+    "description": {
+      "type": "string",
+      "description": "one line about the studio"
+    },
+    "version": {
+      "type": [
+        "string",
+        "number"
+      ],
+      "description": "manifest schema version; currently 1"
+    },
+    "docTypes": {
+      "type": "array",
+      "description": "Kinds of documents this studio works with, matched by filename glob. A matching doc gets the icon and label in the rail, its title derived per titleFrom, and a card in the New Document dialog (the filename follows the glob, the template seeds the content).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "stable identifier"
+          },
+          "match": {
+            "type": "string",
+            "description": "project-relative filename glob; * and ? stay within one path segment, ** spans folders"
+          },
+          "label": {
+            "type": "string",
+            "description": "display label; defaults to the id"
+          },
+          "icon": {
+            "type": "string",
+            "description": "1–2 characters/emoji shown in the document rail",
+            "maxLength": 2
+          },
+          "titleFrom": {
+            "type": "string",
+            "description": "\"h1\" (default), \"filename\", or \"frontmatter:<key>\""
+          },
+          "template": {
+            "type": "string",
+            "description": "seed content for new docs of this type; {{title}} is substituted"
+          }
+        },
+        "required": [
+          "id",
+          "match"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "actions": {
+      "type": "array",
+      "description": "Commands surfaced in the ⌘K palette (and, for surface \"selection\", in the highlight toolbar). An action runs a .claude/skills skill, sends a canned prompt, or both.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "stable identifier; defaults to a slug of the label"
+          },
+          "label": {
+            "type": "string",
+            "description": "palette label (required unless a skill names it)"
+          },
+          "surface": {
+            "enum": [
+              "selection",
+              "doc",
+              "project"
+            ],
+            "description": "what the action operates on; \"selection\" needs highlighted text"
+          },
+          "skill": {
+            "type": "string",
+            "description": "a .claude/skills name to invoke"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "instructions sent to the writing agent (alongside or instead of the skill)"
+          }
+        },
+        "required": [],
+        "additionalProperties": true
+      }
+    },
+    "panels": {
+      "type": "array",
+      "description": "Read-only rendered views over project files, opened as ▦ tabs from the rail or palette.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "stable identifier; defaults to a slug of the title"
+          },
+          "title": {
+            "type": "string",
+            "description": "tab and rail label"
+          },
+          "source": {
+            "type": "string",
+            "description": "project-relative markdown file to render"
+          },
+          "view": {
+            "enum": [
+              "markdown"
+            ],
+            "description": "how the source is rendered; only \"markdown\" today"
+          }
+        },
+        "required": [
+          "title",
+          "source"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Gate profile; loosening grants requires user trust in the app.",
+      "properties": {
+        "edits": {
+          "enum": [
+            "ask",
+            "auto"
+          ],
+          "description": "\"auto\" applies the agent's file edits without per-edit approval; only takes effect after the user explicitly trusts the studio in the app"
+        },
+        "bash": {
+          "enum": [
+            "ask",
+            "deny"
+          ],
+          "description": "\"deny\" removes the shell tool from the agent entirely (tightening never needs trust)"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

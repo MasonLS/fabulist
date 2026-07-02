@@ -18,6 +18,7 @@ import {
   HARNESS_LOCAL_FILE,
   mergeHarnessConfigs,
   parseHarnessConfig,
+  trustGrantSnapshot,
   wantsElevatedPermissions,
   type Harness,
   type HarnessConfig,
@@ -40,10 +41,10 @@ async function readTrust(): Promise<Record<string, string>> {
   }
 }
 
+// hash exactly the descriptor fields marked trust-relevant, so a new grant
+// added to the schema automatically invalidates stored trust
 function permissionsHash(config: HarnessConfig): string {
-  return createHash('sha1')
-    .update(JSON.stringify({ edits: config.permissions.edits ?? 'ask' }))
-    .digest('hex')
+  return createHash('sha1').update(JSON.stringify(trustGrantSnapshot(config))).digest('hex')
 }
 
 async function trustKey(projectId: string): Promise<string> {

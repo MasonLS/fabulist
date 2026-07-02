@@ -19,6 +19,7 @@ import {
 import { commitAll } from './git'
 import * as comments from './comments'
 import { loadGateConfig } from './harness'
+import { schemaMarkdown } from '@shared/harness'
 
 /** System prompt tail; the currently-focused doc (if any) is appended per send. */
 function systemAppend(docFile?: string): string {
@@ -52,32 +53,8 @@ You configure the studio by creating and editing these files in the project root
 - \`.claude/agents/<name>.md\` — subagent personas (reviewers, checkers).
 
 fabulist.json schema — every field optional, unknown fields ignored:
-{
-  "name": "Novel Studio",              // studio name shown in the app
-  "description": "one line",
-  "docTypes": [{
-    "id": "scene",                      // required
-    "match": "*.scene.md",             // required filename glob; top-level files only
-    "label": "Scene",
-    "icon": "S",                       // 1–2 chars/emoji, shown in the document rail
-    "titleFrom": "h1",                 // or "filename" or "frontmatter:<key>"
-    "template": "# {{title}}\\n\\n"      // seeds new docs of this type
-  }],
-  "actions": [{
-    "id": "punch-up",
-    "label": "Punch up dialogue",       // required; appears in the ⌘K palette
-    "surface": "selection",            // "selection" | "doc" | "project"
-    "skill": "punch-up-dialogue",      // a .claude/skills name to invoke, and/or:
-    "prompt": "Sharpen this dialogue…" // instructions sent to the writing agent
-  }],
-  "panels": [
-    { "id": "bible", "title": "Story Bible", "source": "bible.md" }
-  ],                                    // read-only rendered views of top-level .md files
-  "permissions": { "edits": "ask", "bash": "ask" }
-                                        // edits: "ask"|"auto"; bash: "ask"|"deny".
-                                        // "auto" only takes effect after the user
-                                        // explicitly trusts the studio in the app.
-}
+
+${schemaMarkdown()}
 
 Guidelines:
 - Start by interviewing the user briefly: what are they making, what does "good" look

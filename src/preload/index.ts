@@ -8,6 +8,7 @@ import type {
   CommitInfo,
   DocMeta,
   ModelChoice,
+  ProjectEvent,
   ProjectMeta,
   SendOptions
 } from '@shared/types'
@@ -25,12 +26,7 @@ const api = {
   harness: {
     load: (id: string): Promise<Harness> => ipcRenderer.invoke('harness:load', id),
     setTrusted: (id: string, trusted: boolean): Promise<void> =>
-      ipcRenderer.invoke('harness:setTrusted', id, trusted),
-    onChanged: (cb: (id: string) => void): (() => void) => {
-      const listener = (_e: unknown, id: string): void => cb(id)
-      ipcRenderer.on('harness:changed', listener)
-      return () => ipcRenderer.removeListener('harness:changed', listener)
-    }
+      ipcRenderer.invoke('harness:setTrusted', id, trusted)
   },
   project: {
     docs: (id: string): Promise<DocMeta[]> => ipcRenderer.invoke('project:docs', id),
@@ -49,7 +45,12 @@ const api = {
     getModel: (id: string): Promise<string> => ipcRenderer.invoke('project:getModel', id),
     setModel: (id: string, model: string): Promise<void> =>
       ipcRenderer.invoke('project:setModel', id, model),
-    watch: (id: string | null): Promise<void> => ipcRenderer.invoke('project:watch', id)
+    watch: (id: string | null): Promise<void> => ipcRenderer.invoke('project:watch', id),
+    onEvent: (cb: (event: ProjectEvent) => void): (() => void) => {
+      const listener = (_e: unknown, event: ProjectEvent): void => cb(event)
+      ipcRenderer.on('project:event', listener)
+      return () => ipcRenderer.removeListener('project:event', listener)
+    }
   },
   doc: {
     read: (id: string, docFile: string): Promise<string> =>
@@ -61,18 +62,7 @@ const api = {
     getFont: (id: string, docFile: string): Promise<string> =>
       ipcRenderer.invoke('doc:getFont', id, docFile),
     setFont: (id: string, docFile: string, font: string): Promise<void> =>
-      ipcRenderer.invoke('doc:setFont', id, docFile, font),
-    onExternalChange: (cb: (id: string, docFile: string, content: string) => void): (() => void) => {
-      const listener = (_e: unknown, id: string, docFile: string, content: string): void =>
-        cb(id, docFile, content)
-      ipcRenderer.on('doc:external-change', listener)
-      return () => ipcRenderer.removeListener('doc:external-change', listener)
-    },
-    onRemoved: (cb: (id: string, docFile: string) => void): (() => void) => {
-      const listener = (_e: unknown, id: string, docFile: string): void => cb(id, docFile)
-      ipcRenderer.on('doc:removed', listener)
-      return () => ipcRenderer.removeListener('doc:removed', listener)
-    }
+      ipcRenderer.invoke('doc:setFont', id, docFile, font)
   },
   history: {
     log: (id: string): Promise<CommitInfo[]> => ipcRenderer.invoke('history:log', id),
@@ -109,12 +99,7 @@ const api = {
       id: string,
       docFile: string,
       anchors: { id: string; anchor: CommentThread['anchor']; status?: CommentThread['status'] }[]
-    ): Promise<void> => ipcRenderer.invoke('comments:updateAnchors', id, docFile, anchors),
-    onChanged: (cb: (id: string) => void): (() => void) => {
-      const listener = (_e: unknown, id: string): void => cb(id)
-      ipcRenderer.on('comments:changed', listener)
-      return () => ipcRenderer.removeListener('comments:changed', listener)
-    }
+    ): Promise<void> => ipcRenderer.invoke('comments:updateAnchors', id, docFile, anchors)
   },
   agent: {
     send: (id: string, threadId: string, prompt: string, opts?: SendOptions): Promise<void> =>

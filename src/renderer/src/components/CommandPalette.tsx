@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ActionDef } from '@shared/harness'
-import { useStore } from '@/store'
+import { useStore, type FabulistStore } from '@/store'
+import { SURFACES } from '@/lib/surfaces'
 
 interface Command {
   id: string
@@ -13,9 +14,107 @@ interface Command {
 
 /**
  * ⌘K palette. Its contents are largely the studio harness rendered as
- * commands: manifest actions, discovered skills, panels — plus doc switching
- * and app built-ins.
+ * commands. Each group is a provider row below — adding a command source
+ * (agents, hooks, recent files…) is one provider function, not a rewrite.
  */
+type CommandProvider = (s: FabulistStore) => Command[]
+
+const harnessActions: CommandProvider = (s) => {
+  const config = s.harness?.config
+  return (config?.actions ?? []).map((action) => {
+    const surface = SURFACES[action.surface]
+    const available = surface.available(s)
+    return {
+      id: `action:${action.id}`,
+      label: action.label,
+      hint: surface.hint(available),
+      group: config?.name ? `${config.name} actions` : 'Actions',
+      disabled: !available,
+      run: () => s.runAction(action)
+    }
+  })
+}
+
+/** skills not already surfaced through a manifest action */
+const bareSkills: CommandProvider = (s) => {
+  const surfaced = new Set((s.harness?.config.actions ?? []).map((a) => a.skill).filter(Boolean))
+  return (s.harness?.skills ?? [])
+    .filter((skill) => !surfaced.has(skill.name))
+    .map((skill) => {
+      const action: ActionDef = {
+        id: `skill-${skill.name}`,
+        label: skill.name,
+        surface: s.selectionQuote ? 'selection' : 'project',
+        skill: skill.name
+      }
+      return {
+        id: `skill:${skill.name}`,
+        label: skill.name,
+        hint: skill.description || 'skill',
+        group: 'Skills',
+        run: () => s.runAction(action)
+      }
+    })
+}
+
+const panels: CommandProvider = (s) =>
+  (s.harness?.config.panels ?? []).map((panel) => ({
+    id: `panel:${panel.id}`,
+    label: panel.title,
+    hint: panel.source,
+    group: 'Panels',
+    run: () => {
+      s.openPanel(panel.id)
+      s.setPaletteOpen(false)
+    }
+  }))
+
+const documents: CommandProvider = (s) =>
+  s.docs.map((d) => ({
+    id: `doc:${d.file}`,
+    label: d.title,
+    hint: d.kindLabel ?? d.file,
+    group: 'Documents',
+    run: () => {
+      void s.openTab(d.file)
+      s.setPaletteOpen(false)
+    }
+  }))
+
+const builtins: CommandProvider = (s) => [
+  {
+    id: 'builtin:workshop',
+    label: 'Customize studio…',
+    hint: 'design this project’s harness with the agent',
+    group: 'Studio',
+    run: () => {
+      void s.openWorkshop()
+      s.setPaletteOpen(false)
+    }
+  },
+  {
+    id: 'builtin:new-doc',
+    label: 'New document',
+    group: 'Studio',
+    run: () => {
+      s.setPaletteOpen(false)
+      s.setNewDocOpen(true)
+    }
+  },
+  {
+    id: 'builtin:snapshot',
+    label: 'Snapshot',
+    hint: 'save a named point in history',
+    group: 'Studio',
+    run: () => {
+      void s.snapshot()
+      s.setPaletteOpen(false)
+    }
+  }
+]
+
+const PROVIDERS: CommandProvider[] = [harnessActions, bareSkills, panels, documents, builtins]
+
 export default function CommandPalette(): React.JSX.Element | null {
   const open = useStore((s) => s.paletteOpen)
   const setOpen = useStore((s) => s.setPaletteOpen)
@@ -27,108 +126,11 @@ export default function CommandPalette(): React.JSX.Element | null {
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  const commands = useMemo<Command[]>(() => {
-    const s = useStore.getState()
-    const out: Command[] = []
-    const config = harness?.config
-
-    for (const action of config?.actions ?? []) {
-      const needsSelection = action.surface === 'selection'
-      out.push({
-        id: `action:${action.id}`,
-        label: action.label,
-        hint:
-          action.surface === 'selection'
-            ? needsSelection && !selectionQuote
-              ? 'select text first'
-              : 'on selection'
-            : action.surface === 'doc'
-              ? 'on this document'
-              : undefined,
-        group: config?.name ? `${config.name} actions` : 'Actions',
-        disabled: needsSelection && !selectionQuote,
-        run: () => s.runAction(action)
-      })
-    }
-
-    // skills not already surfaced through an action
-    const surfaced = new Set((config?.actions ?? []).map((a) => a.skill).filter(Boolean))
-    for (const skill of harness?.skills ?? []) {
-      if (surfaced.has(skill.name)) continue
-      const action: ActionDef = {
-        id: `skill-${skill.name}`,
-        label: skill.name,
-        surface: selectionQuote ? 'selection' : 'project',
-        skill: skill.name
-      }
-      out.push({
-        id: `skill:${skill.name}`,
-        label: skill.name,
-        hint: skill.description || 'skill',
-        group: 'Skills',
-        run: () => s.runAction(action)
-      })
-    }
-
-    for (const panel of config?.panels ?? []) {
-      out.push({
-        id: `panel:${panel.id}`,
-        label: panel.title,
-        hint: panel.source,
-        group: 'Panels',
-        run: () => {
-          s.openPanel(panel.id)
-          s.setPaletteOpen(false)
-        }
-      })
-    }
-
-    for (const d of docs) {
-      out.push({
-        id: `doc:${d.file}`,
-        label: d.title,
-        hint: d.kindLabel ?? d.file,
-        group: 'Documents',
-        run: () => {
-          void s.openTab(d.file)
-          s.setPaletteOpen(false)
-        }
-      })
-    }
-
-    out.push(
-      {
-        id: 'builtin:workshop',
-        label: 'Customize studio…',
-        hint: 'design this project’s harness with the agent',
-        group: 'Studio',
-        run: () => {
-          void s.openWorkshop()
-          s.setPaletteOpen(false)
-        }
-      },
-      {
-        id: 'builtin:new-doc',
-        label: 'New document',
-        group: 'Studio',
-        run: () => {
-          s.setPaletteOpen(false)
-          s.setNewDocOpen(true)
-        }
-      },
-      {
-        id: 'builtin:snapshot',
-        label: 'Snapshot',
-        hint: 'save a named point in history',
-        group: 'Studio',
-        run: () => {
-          void s.snapshot()
-          s.setPaletteOpen(false)
-        }
-      }
-    )
-    return out
-  }, [harness, docs, selectionQuote])
+  const commands = useMemo<Command[]>(
+    () => PROVIDERS.flatMap((provide) => provide(useStore.getState())),
+    // harness/docs/selectionQuote are the provider inputs that change at runtime
+    [harness, docs, selectionQuote]
+  )
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()

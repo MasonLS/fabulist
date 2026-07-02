@@ -13,10 +13,12 @@ import {
   type DocMeta,
   type ModelChoice,
   type PermissionRequest,
+  type ProjectEvent,
   type ProjectMeta
 } from '@shared/types'
 import type { ActionDef, Harness } from '@shared/harness'
 import { locateAnchor } from './lib/anchors'
+import { SURFACES } from './lib/surfaces'
 
 export type SidebarTab = 'chat' | 'comments' | 'history'
 
@@ -34,7 +36,7 @@ interface ExternalUpdate {
   content: string
 }
 
-interface FabulistStore {
+export interface FabulistStore {
   projects: ProjectMeta[]
   activeProjectId: string | null
   /** docs of the active project */
@@ -157,6 +159,8 @@ interface FabulistStore {
   restorePreview: () => Promise<void>
 
   handleAgentEvent: (e: AgentEvent) => void
+  /** everything the main process observes on the project folder, one dispatcher */
+  handleProjectEvent: (e: ProjectEvent) => void
   handleExternalChange: (projectId: string, docFile: string, content: string) => void
   /** a doc file was deleted outside the app (terminal, agent, teammate's pull) */
   handleDocRemoved: (projectId: string, docFile: string) => void
@@ -248,17 +252,15 @@ export const useStore = create<FabulistStore>((set, get) => ({
   },
 
   runAction: (action, quoteOverride) => {
-    const quote = action.surface === 'selection' ? quoteOverride ?? get().selectionQuote : null
-    if (action.surface === 'selection' && !quote) return
+    const surface = SURFACES[action.surface]
+    if (!surface.available(get(), quoteOverride)) return
+    const quote = surface.quote(get(), quoteOverride)
     const parts: string[] = []
     if (action.skill) {
       parts.push(`Invoke your "${action.skill}" skill (use the Skill tool) and follow it.`)
     }
     if (action.prompt) parts.push(action.prompt)
-    if (action.surface === 'doc' && !action.prompt && !action.skill) return
-    if (action.surface === 'doc') {
-      parts.push('Apply this to the document the author is currently focused on.')
-    }
+    if (surface.framing) parts.push(surface.framing)
     set({ paletteOpen: false })
     get().askClaude(parts.join('\n\n'), quote ? { quote } : {})
   },
@@ -935,6 +937,25 @@ export const useStore = create<FabulistStore>((set, get) => ({
         }
         break
       }
+    }
+  },
+
+  handleProjectEvent: (e) => {
+    if (get().activeProjectId !== e.projectId) return
+    switch (e.kind) {
+      case 'harness-changed':
+        void get().loadHarness()
+        void get().loadDocs() // doc kinds/titles may derive from the manifest
+        break
+      case 'doc-external-change':
+        get().handleExternalChange(e.projectId, e.docFile, e.content)
+        break
+      case 'doc-removed':
+        get().handleDocRemoved(e.projectId, e.docFile)
+        break
+      case 'comments-changed':
+        void get().reloadThreads()
+        break
     }
   },
 
