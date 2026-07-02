@@ -44,6 +44,11 @@ export default function Editor({
   const selTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const editable = useRef(new Compartment()).current
   const askClaude = useStore((s) => s.askClaude)
+  const harness = useStore((s) => s.harness)
+  const runAction = useStore((s) => s.runAction)
+  const setPaletteOpen = useStore((s) => s.setPaletteOpen)
+  // harness selection actions ride the same toolbar as Comment
+  const selectionActions = harness?.config.actions.filter((a) => a.surface === 'selection') ?? []
 
   const external = useStore((s) => s.external)
   const threads = useStore((s) => s.threads)
@@ -315,6 +320,28 @@ export default function Editor({
           <button onClick={onComment} title="Comment — sends this passage and your note to Claude">
             <MarkIcon /> Comment
           </button>
+          {selectionActions.length > 0 && <span className="selection-toolbar-sep" aria-hidden />}
+          {selectionActions.slice(0, 3).map((a) => (
+            <button
+              key={a.id}
+              title={a.prompt ?? (a.skill ? `Runs the "${a.skill}" skill on this passage` : a.label)}
+              onClick={() => {
+                const content = useStore.getState().content
+                runAction(a, content.slice(selection.from, selection.to))
+                setSelection(null)
+              }}
+            >
+              <span className="selection-toolbar-glyph" aria-hidden>
+                ✦
+              </span>
+              {a.label}
+            </button>
+          ))}
+          {selectionActions.length > 3 && (
+            <button title="All actions  ⌘K" onClick={() => setPaletteOpen(true)}>
+              …
+            </button>
+          )}
         </div>
       )}
       {composer && !suggestion && (

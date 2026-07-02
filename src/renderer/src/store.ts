@@ -86,7 +86,8 @@ interface FabulistStore {
 
   loadHarness: () => Promise<void>
   trustStudio: (trusted: boolean) => Promise<void>
-  runAction: (action: ActionDef) => void
+  /** quote overrides the tracked editor selection (used by the selection toolbar) */
+  runAction: (action: ActionDef, quote?: string) => void
   openPanel: (panelId: string | null) => void
   setPaletteOpen: (open: boolean) => void
   setSelectionQuote: (quote: string | null) => void
@@ -229,8 +230,8 @@ export const useStore = create<FabulistStore>((set, get) => ({
     await get().loadHarness()
   },
 
-  runAction: (action) => {
-    const quote = action.surface === 'selection' ? get().selectionQuote : null
+  runAction: (action, quoteOverride) => {
+    const quote = action.surface === 'selection' ? quoteOverride ?? get().selectionQuote : null
     if (action.surface === 'selection' && !quote) return
     const parts: string[] = []
     if (action.skill) {

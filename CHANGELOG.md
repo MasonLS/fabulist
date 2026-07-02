@@ -17,6 +17,9 @@ All notable changes to Fabulist are documented here. The format follows
 - **Command palette (⌘K).** Actions from the manifest, skills discovered under
   `.claude/skills/`, panels, documents, and app commands in one searchable list. Selection
   actions use the current editor selection.
+- **Selection actions live in the highlight toolbar.** Highlighting text now offers the
+  studio's selection-surface actions right next to Comment (up to three, with a … overflow
+  into the palette) — one click runs the skill or prompt on the selected passage.
 - **Studio workshop.** A dedicated agent conversation (Workshop button, or "Customize studio…"
   in the palette) whose system prompt knows the manifest schema — you design doc types, skills,
   actions, and panels by talking, and the agent writes the harness files.
