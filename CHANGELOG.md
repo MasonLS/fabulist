@@ -6,6 +6,18 @@ All notable changes to Fabulist are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **New projects start from a studio.** The New Project flow is now a chooser: **Blank**,
+  **Design with Claude** (genesis — a blank project that opens straight into the studio
+  workshop, where describing your work gets a custom studio built around it), or one of three
+  built-in starter studios — **Novel Studio** (scenes in chapters, a living story bible,
+  tighten-prose/punch-up-dialogue/continuity-check skills), **Campaign Studio** (session notes,
+  NPC forge, roster and world-primer panels), and **Essay Studio** (drafts held to your own
+  style guide). Starters ship with the app (`resources/templates`) and instantiate as fresh
+  projects — copied, de-templated, git-initialized, and named.
+- **Any project can be a template.** `"template": true` in the manifest marks a studio as
+  meant to be instantiated: opening one shows a banner ("edits here change the template for
+  everyone who starts from it") with **New project from this studio**, so a cloned template
+  repo becomes a project factory. Instantiation strips the flag from the copy.
 - **Studios can ship MCP servers — behind trust.** A harness may now carry `.mcp.json` (+
   `enabledMcpjsonServers` in `.claude/settings.json`) and request `permissions.mcp: "ask"`
   or `"allow"` in the manifest. Until the user trusts the studio, project MCP config is
