@@ -28,6 +28,14 @@ const api = {
     setTrusted: (id: string, trusted: boolean): Promise<void> =>
       ipcRenderer.invoke('harness:setTrusted', id, trusted)
   },
+  templates: {
+    list: (): Promise<{ id: string; name: string; description: string }[]> =>
+      ipcRenderer.invoke('templates:list'),
+    create: (templateId: string, title: string): Promise<string> =>
+      ipcRenderer.invoke('templates:create', templateId, title),
+    createFromProject: (id: string, title: string): Promise<string> =>
+      ipcRenderer.invoke('templates:createFromProject', id, title)
+  },
   project: {
     docs: (id: string): Promise<DocMeta[]> => ipcRenderer.invoke('project:docs', id),
     meta: (

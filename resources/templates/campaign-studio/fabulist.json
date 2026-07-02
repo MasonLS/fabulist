@@ -1,0 +1,34 @@
+{
+  "$schema": "../../docs/fabulist.schema.json",
+  "name": "Campaign Studio",
+  "description": "Tabletop campaign: session notes, an NPC roster, a world primer",
+  "version": 1,
+  "template": true,
+  "docTypes": [
+    {
+      "id": "session",
+      "match": "sessions/*.session.md",
+      "label": "Session",
+      "icon": "🎲",
+      "titleFrom": "frontmatter:title",
+      "template": "---\ntitle: {{title}}\ndate: \n---\n\n## What happened\n\n## Loose ends\n"
+    },
+    {
+      "id": "npc",
+      "match": "npcs/*.npc.md",
+      "label": "NPC",
+      "icon": "🧝",
+      "titleFrom": "frontmatter:name",
+      "template": "---\nname: {{title}}\nrole: \nlocation: \n---\n\nVoice, wants, secrets.\n"
+    }
+  ],
+  "actions": [
+    { "label": "Recap this session", "surface": "doc", "prompt": "Write a tight player-facing recap of this session at the top under a 'Recap' heading: what happened, what was learned, open hooks." },
+    { "label": "Forge an NPC", "surface": "project", "skill": "npc-forge" },
+    { "label": "Complicate this", "surface": "selection", "prompt": "Propose three ways this moment could go sideways for the party — one social, one violent, one weird. Reply in chat only." }
+  ],
+  "panels": [
+    { "id": "roster", "title": "NPC Roster", "source": "roster.md" },
+    { "id": "world", "title": "World Primer", "source": "world.md" }
+  ]
+}

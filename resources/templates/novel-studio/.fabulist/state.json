@@ -1,0 +1,12 @@
+{
+  "threads": [
+    {
+      "id": "6591b3a1",
+      "title": "New thread",
+      "chat": [],
+      "createdAt": 1782958810027,
+      "updatedAt": 1782958810027
+    }
+  ],
+  "activeThreadId": "6591b3a1"
+}

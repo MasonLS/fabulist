@@ -26,19 +26,10 @@ function ProjectsView(): React.JSX.Element {
   const projects = useStore((s) => s.projects)
   const activeProjectId = useStore((s) => s.activeProjectId)
   const openProject = useStore((s) => s.openProject)
-  const createProject = useStore((s) => s.createProject)
   const deleteProject = useStore((s) => s.deleteProject)
   const loadProjects = useStore((s) => s.loadProjects)
-  const [creating, setCreating] = useState(false)
-  const [title, setTitle] = useState('')
+  const setNewProjectOpen = useStore((s) => s.setNewProjectOpen)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-
-  const submit = async (): Promise<void> => {
-    const t = title.trim()
-    setCreating(false)
-    setTitle('')
-    if (t) await createProject(t)
-  }
 
   const openFolder = async (): Promise<void> => {
     const id = await window.fabulist.library.openFolder()
@@ -51,37 +42,13 @@ function ProjectsView(): React.JSX.Element {
     <>
       <div className="library-head">
         <span className="library-label">Projects</span>
-        <button className="library-new" onClick={() => setCreating(true)} title="New project">
+        <button className="library-new" onClick={() => setNewProjectOpen(true)} title="New project">
           +
         </button>
       </div>
 
-      {creating && (
-        <form
-          className="library-create"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void submit()
-          }}
-        >
-          <input
-            autoFocus
-            value={title}
-            placeholder="Project title…"
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => void submit()}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setCreating(false)
-                setTitle('')
-              }
-            }}
-          />
-        </form>
-      )}
-
       <nav className="library-list">
-        {projects.length === 0 && !creating && (
+        {projects.length === 0 && (
           <p className="library-empty">No projects yet. Start one with +</p>
         )}
         {projects.map((p) => (

@@ -19,6 +19,10 @@ files:
 asarUnpack:
   - node_modules/@anthropic-ai/claude-agent-sdk/**
   - node_modules/@anthropic-ai/claude-agent-sdk-*/**
+# built-in starter studios, instantiated by the New Project chooser
+extraResources:
+  - from: resources/templates
+    to: templates
 mac:
   category: public.app-category.productivity
   target:

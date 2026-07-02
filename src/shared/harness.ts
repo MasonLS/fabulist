@@ -26,7 +26,7 @@ export const HARNESS_VERSION = 1
 export interface FieldSpec {
   key: string
   /** enum fields validate against `values`; strings are trimmed non-empty */
-  kind: 'string' | 'enum'
+  kind: 'string' | 'enum' | 'boolean'
   values?: readonly string[]
   required?: boolean
   /** one-line description; feeds the workshop prompt, docs, and JSON Schema */
@@ -254,7 +254,13 @@ export const PERMISSION_FIELDS: FieldSpec[] = [
 export const TOP_LEVEL_FIELDS: FieldSpec[] = [
   { key: 'name', kind: 'string', doc: 'studio name, shown in the rail and project list', example: '"Novel Studio"' },
   { key: 'description', kind: 'string', doc: 'one line about the studio', example: '"Long-form fiction with continuity checking"' },
-  { key: 'version', kind: 'string', doc: `manifest schema version; currently ${HARNESS_VERSION}`, example: `${HARNESS_VERSION}` }
+  { key: 'version', kind: 'string', doc: `manifest schema version; currently ${HARNESS_VERSION}`, example: `${HARNESS_VERSION}` },
+  {
+    key: 'template',
+    kind: 'boolean',
+    doc: 'mark this project as a studio template: opening it offers "new project from this studio" instead of editing it in place',
+    example: 'true'
+  }
 ]
 
 export const LIST_BLOCKS = [DOC_TYPES_BLOCK, ACTIONS_BLOCK, PANELS_BLOCK] as const
@@ -264,6 +270,8 @@ export const LIST_BLOCKS = [DOC_TYPES_BLOCK, ACTIONS_BLOCK, PANELS_BLOCK] as con
 export interface HarnessConfig {
   name?: string
   description?: string
+  /** this project is a studio template, meant to be instantiated rather than edited */
+  template?: boolean
   docTypes: DocTypeDef[]
   actions: ActionDef[]
   panels: PanelDef[]
@@ -307,6 +315,12 @@ export const EMPTY_HARNESS: Harness = {
 
 function parseField(spec: FieldSpec, value: unknown, warn: (msg: string) => void, at: string): string | undefined {
   if (value === undefined || value === null) return undefined
+  if (spec.kind === 'boolean') {
+    if (typeof value === 'boolean') return String(value)
+    if (value === 'true' || value === 'false') return value
+    warn(`${at}.${spec.key} must be true or false`)
+    return undefined
+  }
   if (typeof value !== 'string') {
     // tolerate numbers for fields like version
     if (typeof value === 'number') return String(value)
@@ -391,6 +405,7 @@ export function parseHarnessConfig(raw: unknown, warnings: string[]): HarnessCon
   return {
     name: top.name,
     description: top.description,
+    template: top.template === 'true' ? true : undefined,
     docTypes: parseListBlock(DOC_TYPES_BLOCK, obj.docTypes, warnings),
     actions: parseListBlock(ACTIONS_BLOCK, obj.actions, warnings),
     panels: parseListBlock(PANELS_BLOCK, obj.panels, warnings),
@@ -412,6 +427,7 @@ export function mergeHarnessConfigs(base: HarnessConfig, local: HarnessConfig): 
   return {
     name: local.name ?? base.name,
     description: local.description ?? base.description,
+    template: base.template,
     docTypes: mergeList(base.docTypes, local.docTypes),
     actions: mergeList(base.actions, local.actions),
     panels: mergeList(base.panels, local.panels),
@@ -521,7 +537,11 @@ export function schemaMarkdown(): string {
 /** JSON Schema (draft-07) for fabulist.json, for editor autocomplete. */
 export function jsonSchema(): Record<string, unknown> {
   const fieldSchema = (f: FieldSpec): Record<string, unknown> => ({
-    ...(f.kind === 'enum' ? { enum: [...f.values!] } : { type: 'string' }),
+    ...(f.kind === 'enum'
+      ? { enum: [...f.values!] }
+      : f.kind === 'boolean'
+        ? { type: 'boolean' }
+        : { type: 'string' }),
     description: f.doc,
     ...(f.maxLen ? { maxLength: f.maxLen } : {})
   })

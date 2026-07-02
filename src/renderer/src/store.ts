@@ -87,6 +87,8 @@ export interface FabulistStore {
   paletteOpen: boolean
   /** the new-document dialog (title + doc type) */
   newDocOpen: boolean
+  /** the new-project chooser (blank / genesis / starter studios) */
+  newProjectOpen: boolean
   /** current editor selection, for selection-surface actions */
   selectionQuote: string | null
 
@@ -98,6 +100,13 @@ export interface FabulistStore {
   closePanel: (panelId: string) => void
   setPaletteOpen: (open: boolean) => void
   setNewDocOpen: (open: boolean) => void
+  setNewProjectOpen: (open: boolean) => void
+  /** instantiate a built-in starter studio as a new project */
+  createProjectFromTemplate: (templateId: string, title: string) => Promise<void>
+  /** instantiate the open template project as a new project */
+  createProjectFromCurrent: (title: string) => Promise<void>
+  /** genesis: blank project that opens straight into the workshop */
+  createProjectWithWorkshop: (title: string) => Promise<void>
   setSelectionQuote: (quote: string | null) => void
   openWorkshop: () => Promise<void>
 
@@ -231,6 +240,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
   activePanel: null,
   paletteOpen: false,
   newDocOpen: false,
+  newProjectOpen: false,
   selectionQuote: null,
 
   loadHarness: async () => {
@@ -288,6 +298,26 @@ export const useStore = create<FabulistStore>((set, get) => ({
 
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setNewDocOpen: (open) => set({ newDocOpen: open }),
+  setNewProjectOpen: (open) => set({ newProjectOpen: open }),
+
+  createProjectFromTemplate: async (templateId, title) => {
+    const id = await window.fabulist.templates.create(templateId, title)
+    await get().loadProjects()
+    await get().openProject(id)
+  },
+
+  createProjectFromCurrent: async (title) => {
+    const src = get().activeProjectId
+    if (!src) return
+    const id = await window.fabulist.templates.createFromProject(src, title)
+    await get().loadProjects()
+    await get().openProject(id)
+  },
+
+  createProjectWithWorkshop: async (title) => {
+    await get().createProject(title)
+    await get().openWorkshop()
+  },
   setSelectionQuote: (quote) => {
     if (get().selectionQuote !== quote) set({ selectionQuote: quote })
   },

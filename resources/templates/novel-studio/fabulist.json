@@ -1,0 +1,26 @@
+{
+  "$schema": "../../docs/fabulist.schema.json",
+  "name": "Novel Studio",
+  "description": "Long-form fiction: scenes in chapters, a living story bible, continuity checking",
+  "version": 1,
+  "template": true,
+  "docTypes": [
+    {
+      "id": "scene",
+      "match": "chapters/*.scene.md",
+      "label": "Scene",
+      "icon": "🎬",
+      "titleFrom": "frontmatter:title",
+      "template": "---\ntitle: {{title}}\npov: \nday: \n---\n\nWrite the scene.\n"
+    }
+  ],
+  "actions": [
+    { "label": "Tighten prose", "surface": "selection", "skill": "tighten-prose" },
+    { "label": "Punch up dialogue", "surface": "selection", "skill": "punch-up-dialogue" },
+    { "label": "Summarize this chapter", "surface": "doc", "prompt": "Give me a five-sentence summary of this scene: what changes, who wants what, and what question it leaves open. Reply in chat only." },
+    { "label": "Continuity check", "surface": "project", "skill": "continuity-check" }
+  ],
+  "panels": [
+    { "id": "bible", "title": "Story Bible", "source": "bible.md" }
+  ]
+}

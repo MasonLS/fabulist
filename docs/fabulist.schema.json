@@ -18,6 +18,10 @@
       ],
       "description": "manifest schema version; currently 1"
     },
+    "template": {
+      "type": "boolean",
+      "description": "mark this project as a studio template: opening it offers \"new project from this studio\" instead of editing it in place"
+    },
     "docTypes": {
       "type": "array",
       "description": "Kinds of documents this studio works with, matched by filename glob. A matching doc gets the icon and label in the rail, its title derived per titleFrom, and a card in the New Document dialog (the filename follows the glob, the template seeds the content).",

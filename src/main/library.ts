@@ -66,7 +66,7 @@ user's writing partner for "${title}".
 
 // .claude/ itself is committed (skills/agents are part of a shareable studio);
 // only session-local files stay out of the repo
-const GITIGNORE = `.fabulist/
+export const GITIGNORE = `.fabulist/
 .claude/settings.local.json
 fabulist.local.json
 `
@@ -231,6 +231,10 @@ function patchProject(projectId: string, patch: Partial<ProjectFile>): Promise<v
     const cur = await ensureProjectUnlocked(projectId)
     await writeProjectUnlocked(projectId, { ...cur, ...patch })
   })
+}
+
+export function setProjectTitle(projectId: string, title: string): Promise<void> {
+  return patchProject(projectId, { title })
 }
 
 // --- doc metadata ---

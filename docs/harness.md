@@ -35,6 +35,7 @@ Top-level fields (all optional; unknown fields are ignored):
   - `name`: studio name, shown in the rail and project list — e.g. "Novel Studio"
   - `description`: one line about the studio — e.g. "Long-form fiction with continuity checking"
   - `version`: manifest schema version; currently 1 — e.g. 1
+  - `template`: mark this project as a studio template: opening it offers "new project from this studio" instead of editing it in place — e.g. true
 
 `docTypes` — Kinds of documents this studio works with, matched by filename glob. A matching doc gets the icon and label in the rail, its title derived per titleFrom, and a card in the New Document dialog (the filename follows the glob, the template seeds the content).
   - `id` (required): stable identifier — e.g. "scene"

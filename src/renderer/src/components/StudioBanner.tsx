@@ -19,6 +19,9 @@ export default function StudioBanner(): React.JSX.Element | null {
   const wantsAuto = wantsElevatedPermissions(config)
   const name = config.name ?? 'This project'
 
+  // a template exists to be instantiated; editing it changes the template itself
+  if (config.template) return <TemplateBanner name={name} />
+
   if (!wantsAuto || harness.trusted) {
     // no pending decision; only surface manifest problems
     if (harness.warnings.length === 0) return null
@@ -71,6 +74,59 @@ export default function StudioBanner(): React.JSX.Element | null {
       <button className="btn-ghost btn-small" disabled={busy} onClick={() => void decide(false)}>
         Keep asking
       </button>
+    </div>
+  )
+}
+
+function TemplateBanner({ name }: { name: string }): React.JSX.Element {
+  const createProjectFromCurrent = useStore((s) => s.createProjectFromCurrent)
+  const [title, setTitle] = useState('')
+  const [naming, setNaming] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const create = async (): Promise<void> => {
+    const t = title.trim()
+    if (!t || busy) return
+    setBusy(true)
+    try {
+      await createProjectFromCurrent(t)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="studio-banner is-template">
+      <span className="studio-banner-text">
+        <strong>{name}</strong> is a studio template — edits here change the template for
+        everyone who starts from it.
+      </span>
+      {naming ? (
+        <form
+          className="studio-banner-form"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void create()
+          }}
+        >
+          <input
+            autoFocus
+            value={title}
+            placeholder="Project title…"
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setNaming(false)
+            }}
+          />
+          <button type="submit" className="btn-primary btn-small" disabled={!title.trim() || busy}>
+            {busy ? 'Creating…' : 'Create'}
+          </button>
+        </form>
+      ) : (
+        <button className="btn-primary btn-small" onClick={() => setNaming(true)}>
+          New project from this studio
+        </button>
+      )}
     </div>
   )
 }

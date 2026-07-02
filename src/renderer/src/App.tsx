@@ -10,6 +10,7 @@ import CommandPalette from '@/components/CommandPalette'
 import PanelView from '@/components/PanelView'
 import StudioBanner from '@/components/StudioBanner'
 import NewDocDialog from '@/components/NewDocDialog'
+import NewProjectDialog from '@/components/NewProjectDialog'
 
 export default function App(): React.JSX.Element {
   const activeProjectId = useStore((s) => s.activeProjectId)
@@ -116,6 +117,7 @@ export default function App(): React.JSX.Element {
       {projectOpen && <Sidebar projectId={activeProjectId!} />}
       <CommandPalette />
       <NewDocDialog />
+      <NewProjectDialog />
     </div>
   )
 }
@@ -195,7 +197,7 @@ function UnsupportedDoc({ file }: { file: string }): React.JSX.Element {
 }
 
 function EmptyState(): React.JSX.Element {
-  const createProject = useStore((s) => s.createProject)
+  const setNewProjectOpen = useStore((s) => s.setNewProjectOpen)
   return (
     <div className="empty-state">
       <div className="empty-state-inner">
@@ -203,10 +205,11 @@ function EmptyState(): React.JSX.Element {
         <h2>Every project is a little world.</h2>
         <p>
           A project gathers your documents in one place — each a Claude Code workspace under the
-          hood, versioned and rewindable, shared with an agent that reads across the whole project.
-          Select a project on the left, or begin a new one.
+          hood, versioned and rewindable, shared with an agent that reads across the whole
+          project. Start blank, from a studio built for your kind of work, or describe the work
+          and let Claude design the studio around it.
         </p>
-        <button className="btn-primary" onClick={() => createProject('Untitled')}>
+        <button className="btn-primary" onClick={() => setNewProjectOpen(true)}>
           New project
         </button>
       </div>
