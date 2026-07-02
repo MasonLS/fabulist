@@ -2227,6 +2227,17 @@ input::placeholder {
   padding: 16px 8px 8px;
 }
 
+/* panel tabs sit in the strip like documents, marked with a view glyph */
+.tab-panel .tab-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab-panel-glyph {
+  font-size: 10px;
+  color: var(--accent-deep);
+}
+
 /* ─── harness panels ─── */
 
 .panel-view {

@@ -78,7 +78,9 @@ interface FabulistStore {
   autoApprove: boolean
   /** the active project's studio harness (fabulist.json + skills), if loaded */
   harness: Harness | null
-  /** an open harness panel replaces the editor view */
+  /** harness panels open as tabs, like documents; ids into harness.config.panels */
+  openPanels: string[]
+  /** the focused panel tab; when set it shows instead of the active doc */
   activePanel: string | null
   paletteOpen: boolean
   /** current editor selection, for selection-surface actions */
@@ -88,7 +90,8 @@ interface FabulistStore {
   trustStudio: (trusted: boolean) => Promise<void>
   /** quote overrides the tracked editor selection (used by the selection toolbar) */
   runAction: (action: ActionDef, quote?: string) => void
-  openPanel: (panelId: string | null) => void
+  openPanel: (panelId: string) => void
+  closePanel: (panelId: string) => void
   setPaletteOpen: (open: boolean) => void
   setSelectionQuote: (quote: string | null) => void
   openWorkshop: () => Promise<void>
@@ -161,6 +164,14 @@ let idleCommitTimer: ReturnType<typeof setTimeout> | null = null
 let anchorTimer: ReturnType<typeof setTimeout> | null = null
 let extSeq = 1
 
+// panel tabs persist alongside doc tabs in project.json's openTabs, prefixed
+// so a plain filename can never collide with a panel id
+const PANEL_TAB = 'panel:'
+const combinedTabs = (openDocs: string[], openPanels: string[]): string[] => [
+  ...openDocs,
+  ...openPanels.map((id) => PANEL_TAB + id)
+]
+
 /** Re-anchor stored threads against current content; returns updated copies. */
 function reanchor(threads: CommentThread[], content: string): CommentThread[] {
   return threads.map((t) => {
@@ -207,6 +218,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
   scrollTo: null,
   autoApprove: localStorage.getItem('fabulist:autoApprove') === '1',
   harness: null,
+  openPanels: [],
   activePanel: null,
   paletteOpen: false,
   selectionQuote: null,
@@ -215,12 +227,11 @@ export const useStore = create<FabulistStore>((set, get) => ({
     const id = get().activeProjectId
     if (!id) return
     const harness = await window.fabulist.harness.load(id)
-    // drop a panel whose definition disappeared out from under us
+    // drop tabs for panels whose definition disappeared out from under us
+    const openPanels = get().openPanels.filter((p) => harness.config.panels.some((x) => x.id === p))
     const activePanel =
-      get().activePanel && harness.config.panels.some((p) => p.id === get().activePanel)
-        ? get().activePanel
-        : null
-    set({ harness, activePanel })
+      get().activePanel && openPanels.includes(get().activePanel!) ? get().activePanel : null
+    set({ harness, openPanels, activePanel })
   },
 
   trustStudio: async (trusted) => {
@@ -246,7 +257,27 @@ export const useStore = create<FabulistStore>((set, get) => ({
     get().askClaude(parts.join('\n\n'), quote ? { quote } : {})
   },
 
-  openPanel: (panelId) => set({ activePanel: panelId }),
+  openPanel: (panelId) => {
+    const id = get().activeProjectId
+    if (!id || !get().harness?.config.panels.some((p) => p.id === panelId)) return
+    const openPanels = get().openPanels.includes(panelId)
+      ? get().openPanels
+      : [...get().openPanels, panelId]
+    set({ openPanels, activePanel: panelId })
+    void window.fabulist.project.setOpenTabs(id, combinedTabs(get().openDocs, openPanels))
+  },
+
+  closePanel: (panelId) => {
+    const id = get().activeProjectId
+    if (!id) return
+    const openPanels = get().openPanels.filter((p) => p !== panelId)
+    // closing the focused panel falls back to the remaining tabs: last panel, else the active doc
+    const activePanel =
+      get().activePanel === panelId ? openPanels[openPanels.length - 1] ?? null : get().activePanel
+    set({ openPanels, activePanel })
+    void window.fabulist.project.setOpenTabs(id, combinedTabs(get().openDocs, openPanels))
+  },
+
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setSelectionQuote: (quote) => {
     if (get().selectionQuote !== quote) set({ selectionQuote: quote })
@@ -302,7 +333,11 @@ export const useStore = create<FabulistStore>((set, get) => ({
     ])
 
     const present = new Set(docs.map((d) => d.file))
-    let openDocs = meta.openTabs.filter((f) => present.has(f))
+    let openDocs = meta.openTabs.filter((f) => !f.startsWith(PANEL_TAB) && present.has(f))
+    const openPanels = meta.openTabs
+      .filter((f) => f.startsWith(PANEL_TAB))
+      .map((f) => f.slice(PANEL_TAB.length))
+      .filter((p) => harness.config.panels.some((x) => x.id === p))
     if (openDocs.length === 0 && docs.length > 0) openDocs = [docs[0].file]
     const activeDoc =
       meta.activeDoc && openDocs.includes(meta.activeDoc)
@@ -345,6 +380,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
       pendingCommentId: null,
       queuedCommentSends: [],
       harness,
+      openPanels,
       activePanel: null,
       paletteOpen: false,
       selectionQuote: null,
@@ -374,6 +410,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
       commits: [],
       preview: null,
       harness: null,
+      openPanels: [],
       activePanel: null,
       paletteOpen: false,
       selectionQuote: null
@@ -419,7 +456,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
       const openDocs = [...get().openDocs, docFile]
       set({ openDocs })
       const id = get().activeProjectId
-      if (id) void window.fabulist.project.setOpenTabs(id, openDocs)
+      if (id) void window.fabulist.project.setOpenTabs(id, combinedTabs(openDocs, get().openPanels))
     }
     await get().setActiveDoc(docFile)
   },
@@ -432,7 +469,7 @@ export const useStore = create<FabulistStore>((set, get) => ({
     const openDocs = get().openDocs.filter((f) => f !== docFile)
     const { [docFile]: _gone, ...docContents } = get().docContents
     set({ openDocs, docContents })
-    void window.fabulist.project.setOpenTabs(id, openDocs)
+    void window.fabulist.project.setOpenTabs(id, combinedTabs(openDocs, get().openPanels))
     if (get().activeDoc === docFile) {
       const next = openDocs[openDocs.length - 1] ?? null
       if (next) await get().setActiveDoc(next)

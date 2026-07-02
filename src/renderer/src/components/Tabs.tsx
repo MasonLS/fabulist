@@ -9,13 +9,18 @@ export default function Tabs(): React.JSX.Element {
   const closeTab = useStore((s) => s.closeTab)
   const createDoc = useStore((s) => s.createDoc)
   const harness = useStore((s) => s.harness)
+  const openPanels = useStore((s) => s.openPanels)
   const activePanel = useStore((s) => s.activePanel)
+  const openPanel = useStore((s) => s.openPanel)
+  const closePanel = useStore((s) => s.closePanel)
 
   const [adding, setAdding] = useState(false)
   const [title, setTitle] = useState('')
   const [typeId, setTypeId] = useState('')
 
   const docTypes = harness?.config.docTypes ?? []
+  const panelFor = (id: string): { title: string; source: string } | undefined =>
+    harness?.config.panels.find((p) => p.id === id)
 
   const titleFor = (file: string): string => docs.find((d) => d.file === file)?.title || file
 
@@ -55,6 +60,44 @@ export default function Tabs(): React.JSX.Element {
             </button>
           </div>
         ))}
+
+        {openPanels.map((id) => {
+          const p = panelFor(id)
+          if (!p) return null
+          return (
+            <div
+              key={`panel:${id}`}
+              className={`tab tab-panel ${id === activePanel ? 'is-active' : ''}`}
+              onMouseDown={(e) => {
+                if (e.button === 1) {
+                  e.preventDefault()
+                  closePanel(id)
+                }
+              }}
+            >
+              <button
+                className="tab-main"
+                onClick={() => openPanel(id)}
+                title={`${p.source} — view from fabulist.json`}
+              >
+                <span className="tab-panel-glyph" aria-hidden>
+                  ▦
+                </span>
+                {p.title}
+              </button>
+              <button
+                className="tab-close"
+                title="Close view"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  closePanel(id)
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )
+        })}
 
         {adding ? (
           <form

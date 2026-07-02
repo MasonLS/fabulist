@@ -42,6 +42,9 @@ All notable changes to Fabulist are documented here. The format follows
   where "✦ Novel Studio — customize in the workshop" can actually explain itself (and doubles as
   the workshop entry, including "No studio yet — design one" for plain projects). Studio growth —
   more actions, panels, doc types — lands in the palette and rail, never widens the header.
+- **Views open as tabs, like documents.** Opening a panel from the rail or palette adds a
+  closable ▦ tab to the strip; it keeps its place while you switch to documents and is restored
+  when you reopen the project, instead of vanishing the moment you click anything else.
 - New projects' `.gitignore` no longer excludes `.claude/` — skills and agent personas are part
   of a shareable studio. Only `.fabulist/`, `.claude/settings.local.json`, and
   `fabulist.local.json` stay untracked.
