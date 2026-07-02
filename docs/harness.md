@@ -88,6 +88,13 @@ to those fields — including by the agent — drops back to untrusted until
 re-accepted, and a *new* grant added to the schema re-prompts automatically.
 `fabulist.local.json` may override looks but never permissions.
 
+**MCP servers.** A studio can ship external tools: define servers in `.mcp.json`
+at the project root, enable them with `enabledMcpjsonServers` in
+`.claude/settings.json`, and set `permissions.mcp` in the manifest. Until the
+user trusts the studio, project MCP config is ignored entirely (servers are
+processes — connecting is already code execution). Once trusted, `"ask"` routes
+every MCP tool call through an approval card and `"allow"` auto-approves them.
+
 ## The workshop
 
 The **workshop** (open it from the studio entry in the rail, or "Customize
