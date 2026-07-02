@@ -6,6 +6,9 @@ import Editor from '@/components/Editor'
 import Tabs from '@/components/Tabs'
 import Sidebar from '@/components/Sidebar'
 import VersionPreview from '@/components/VersionPreview'
+import CommandPalette from '@/components/CommandPalette'
+import PanelView from '@/components/PanelView'
+import StudioBanner from '@/components/StudioBanner'
 
 export default function App(): React.JSX.Element {
   const activeProjectId = useStore((s) => s.activeProjectId)
@@ -19,12 +22,22 @@ export default function App(): React.JSX.Element {
   const libraryOpen = useStore((s) => s.libraryOpen)
   const toggleLibrary = useStore((s) => s.toggleLibrary)
   const snapshot = useStore((s) => s.snapshot)
+  const harness = useStore((s) => s.harness)
+  const activePanel = useStore((s) => s.activePanel)
+  const openWorkshop = useStore((s) => s.openWorkshop)
+  const setPaletteOpen = useStore((s) => s.setPaletteOpen)
+  const panel = harness?.config.panels.find((p) => p.id === activePanel) ?? null
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === '\\' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         useStore.getState().toggleLibrary()
+      }
+      if (e.key === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
+        if (!useStore.getState().activeProjectId) return
+        e.preventDefault()
+        useStore.getState().setPaletteOpen(!useStore.getState().paletteOpen)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -58,7 +71,7 @@ export default function App(): React.JSX.Element {
           </div>
           {projectOpen && (
             <div className="workspace-actions">
-              {doc && (
+              {doc && !panel && (
                 <span className="workspace-meta">
                   {doc.wordCount.toLocaleString()} words
                   {agent && agent.status !== 'idle' && agent.status !== 'done' && (
@@ -66,7 +79,31 @@ export default function App(): React.JSX.Element {
                   )}
                 </span>
               )}
-              {doc && <FontPicker />}
+              {harness?.config.name ? (
+                <button
+                  className="studio-chip"
+                  onClick={() => void openWorkshop()}
+                  title={`${harness.config.description ?? 'Studio defined by fabulist.json'} — click to customize in the workshop`}
+                >
+                  ✦ {harness.config.name}
+                </button>
+              ) : (
+                <button
+                  className="btn-ghost"
+                  onClick={() => void openWorkshop()}
+                  title="Design this project's studio with the agent — doc types, actions, skills, panels"
+                >
+                  Workshop
+                </button>
+              )}
+              <button
+                className="btn-ghost"
+                onClick={() => setPaletteOpen(true)}
+                title="Actions, skills, documents  ⌘K"
+              >
+                Actions
+              </button>
+              {doc && !panel && <FontPicker />}
               <button className="btn-ghost" onClick={() => snapshot()} title="Save a named point in history">
                 Snapshot
               </button>
@@ -81,8 +118,11 @@ export default function App(): React.JSX.Element {
           )}
         </header>
 
+        {projectOpen && <StudioBanner />}
         {projectOpen ? (
-          preview && doc ? (
+          panel ? (
+            <PanelView key={panel.id} panel={panel} />
+          ) : preview && doc ? (
             <VersionPreview />
           ) : doc ? (
             doc.type === 'markdown' ? (
@@ -98,6 +138,7 @@ export default function App(): React.JSX.Element {
         )}
       </main>
       {projectOpen && <Sidebar projectId={activeProjectId!} />}
+      <CommandPalette />
     </div>
   )
 }

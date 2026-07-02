@@ -12,6 +12,8 @@ export interface ProjectMeta {
   createdAt: number
   updatedAt: number
   updatedLabel?: string // most-recent doc title, for the rail subtitle
+  /** studio name from fabulist.json, when the project defines a harness */
+  studio?: string
 }
 
 export interface DocMeta {
@@ -25,6 +27,12 @@ export interface DocMeta {
   updatedAt: number
   wordCount: number
   preview: string
+  /** harness doc-type id when a studio's docTypes glob matches this file */
+  kind?: string
+  /** display label for the kind, e.g. "Scene" */
+  kindLabel?: string
+  /** rail glyph for the kind */
+  kindIcon?: string
 }
 
 export interface CommentMessage {
@@ -128,6 +136,8 @@ export interface AgentThread {
   updatedAt: number
   /** number of chat items in the thread */
   messageCount: number
+  /** 'workshop' threads design the studio itself (edit fabulist.json, skills, CLAUDE.md) */
+  kind?: 'workshop'
 }
 
 export interface ChatItem {

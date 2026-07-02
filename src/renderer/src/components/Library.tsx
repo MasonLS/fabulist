@@ -27,6 +27,7 @@ function ProjectsView(): React.JSX.Element {
   const openProject = useStore((s) => s.openProject)
   const createProject = useStore((s) => s.createProject)
   const deleteProject = useStore((s) => s.deleteProject)
+  const loadProjects = useStore((s) => s.loadProjects)
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -36,6 +37,13 @@ function ProjectsView(): React.JSX.Element {
     setCreating(false)
     setTitle('')
     if (t) await createProject(t)
+  }
+
+  const openFolder = async (): Promise<void> => {
+    const id = await window.fabulist.library.openFolder()
+    if (!id) return
+    await loadProjects()
+    await openProject(id)
   }
 
   return (
@@ -80,6 +88,7 @@ function ProjectsView(): React.JSX.Element {
             <button className="library-item-main" onClick={() => void openProject(p.id)}>
               <span className="library-item-title">{p.title}</span>
               <span className="library-item-meta">
+                {p.studio && <span className="library-item-studio">✦ {p.studio} · </span>}
                 {relativeTime(p.updatedAt)} · {p.docCount} {p.docCount === 1 ? 'doc' : 'docs'}
               </span>
             </button>
@@ -108,6 +117,16 @@ function ProjectsView(): React.JSX.Element {
           </div>
         ))}
       </nav>
+
+      <footer className="library-foot">
+        <button
+          className="btn-ghost"
+          onClick={() => void openFolder()}
+          title="Open any folder as a project — a fabulist.json inside defines its studio"
+        >
+          Open folder…
+        </button>
+      </footer>
     </>
   )
 }
@@ -121,17 +140,20 @@ function DocsView(): React.JSX.Element {
   const deleteDoc = useStore((s) => s.deleteDoc)
   const createDoc = useStore((s) => s.createDoc)
   const setRailView = useStore((s) => s.setRailView)
+  const harness = useStore((s) => s.harness)
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
+  const [typeId, setTypeId] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const project = projects.find((p) => p.id === activeProjectId)
+  const docTypes = harness?.config.docTypes ?? []
 
   const submit = async (): Promise<void> => {
     const t = title.trim()
     setCreating(false)
     setTitle('')
-    if (t) await createDoc(t)
+    if (t) await createDoc(t, typeId || undefined)
   }
 
   return (
@@ -163,7 +185,12 @@ function DocsView(): React.JSX.Element {
             value={title}
             placeholder="Document title…"
             onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => void submit()}
+            onBlur={(e) => {
+              // choosing a doc type shouldn't submit-and-close the form
+              if (!e.relatedTarget || !(e.relatedTarget as HTMLElement).closest('.library-create')) {
+                void submit()
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 setCreating(false)
@@ -171,6 +198,16 @@ function DocsView(): React.JSX.Element {
               }
             }}
           />
+          {docTypes.length > 0 && (
+            <select value={typeId} onChange={(e) => setTypeId(e.target.value)} title="Document type">
+              <option value="">Document</option>
+              {docTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label ?? t.id}
+                </option>
+              ))}
+            </select>
+          )}
         </form>
       )}
 
@@ -180,11 +217,16 @@ function DocsView(): React.JSX.Element {
         )}
         {docs.map((d) => (
           <div key={d.file} className={`library-doc ${d.file === activeDoc ? 'is-active' : ''}`}>
-            <button className="library-doc-main" onClick={() => void openTab(d.file)} title={d.file}>
+            <button
+              className="library-doc-main"
+              onClick={() => void openTab(d.file)}
+              title={d.kindLabel ? `${d.file} · ${d.kindLabel}` : d.file}
+            >
               <span className="library-doc-glyph" aria-hidden>
-                ❡
+                {d.kindIcon ?? '❡'}
               </span>
               <span className="library-doc-title">{d.title}</span>
+              {d.kindLabel && <span className="library-doc-kind">{d.kindLabel}</span>}
             </button>
             {confirmDelete === d.file ? (
               <div className="library-item-confirm">

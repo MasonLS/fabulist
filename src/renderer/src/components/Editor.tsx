@@ -91,8 +91,13 @@ export default function Editor({
                 const sel = update.state.selection.main
                 if (sel.empty) {
                   setSelection(null)
+                  useStore.getState().setSelectionQuote(null)
                   return
                 }
+                // selection-surface harness actions (⌘K palette) read this
+                useStore
+                  .getState()
+                  .setSelectionQuote(update.state.doc.sliceString(sel.from, sel.to))
                 const view2 = viewRef.current
                 if (!view2) return
                 const from = Math.min(sel.from, sel.to)
@@ -130,6 +135,7 @@ export default function Editor({
       view.destroy()
       viewRef.current = null
       useStore.getState().setInlineSuggestion(null)
+      useStore.getState().setSelectionQuote(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, docFile])

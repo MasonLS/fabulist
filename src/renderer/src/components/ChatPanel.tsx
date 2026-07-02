@@ -201,7 +201,10 @@ function ThreadBar({ projectId, busy }: { projectId: string; busy: boolean }): R
         onClick={() => setOpen((o) => !o)}
         title="Switch conversation"
       >
-        <span className="thread-current-title">{active?.title ?? 'Conversation'}</span>
+        <span className="thread-current-title">
+          {active?.kind === 'workshop' && <span aria-hidden>✦ </span>}
+          {active?.title ?? 'Conversation'}
+        </span>
         <svg className="thread-caret" width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
           <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -248,7 +251,10 @@ function ThreadBar({ projectId, busy }: { projectId: string; busy: boolean }): R
                       setRenaming(t.id)
                     }}
                   >
-                    <span className="thread-row-title">{t.title}</span>
+                    <span className="thread-row-title">
+                      {t.kind === 'workshop' && <span aria-hidden>✦ </span>}
+                      {t.title}
+                    </span>
                     <span className="thread-row-meta">
                       {relativeTime(t.updatedAt)}
                       {t.messageCount > 0 && ` · ${t.messageCount} msg`}

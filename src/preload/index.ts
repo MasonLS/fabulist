@@ -11,6 +11,7 @@ import type {
   ProjectMeta,
   SendOptions
 } from '@shared/types'
+import type { Harness } from '@shared/harness'
 
 const api = {
   library: {
@@ -18,7 +19,18 @@ const api = {
     createProject: (title: string): Promise<ProjectMeta> =>
       ipcRenderer.invoke('library:createProject', title),
     deleteProject: (id: string): Promise<void> => ipcRenderer.invoke('library:deleteProject', id),
-    reveal: (id: string): Promise<void> => ipcRenderer.invoke('library:reveal', id)
+    reveal: (id: string): Promise<void> => ipcRenderer.invoke('library:reveal', id),
+    openFolder: (): Promise<string | null> => ipcRenderer.invoke('library:openFolder')
+  },
+  harness: {
+    load: (id: string): Promise<Harness> => ipcRenderer.invoke('harness:load', id),
+    setTrusted: (id: string, trusted: boolean): Promise<void> =>
+      ipcRenderer.invoke('harness:setTrusted', id, trusted),
+    onChanged: (cb: (id: string) => void): (() => void) => {
+      const listener = (_e: unknown, id: string): void => cb(id)
+      ipcRenderer.on('harness:changed', listener)
+      return () => ipcRenderer.removeListener('harness:changed', listener)
+    }
   },
   project: {
     docs: (id: string): Promise<DocMeta[]> => ipcRenderer.invoke('project:docs', id),
@@ -26,8 +38,8 @@ const api = {
       id: string
     ): Promise<{ title: string; docs: { file: string; font?: string }[]; openTabs: string[]; activeDoc: string | null }> =>
       ipcRenderer.invoke('project:meta', id),
-    createDoc: (id: string, title: string): Promise<DocMeta> =>
-      ipcRenderer.invoke('project:createDoc', id, title),
+    createDoc: (id: string, title: string, typeId?: string): Promise<DocMeta> =>
+      ipcRenderer.invoke('project:createDoc', id, title, typeId),
     deleteDoc: (id: string, docFile: string): Promise<void> =>
       ipcRenderer.invoke('project:deleteDoc', id, docFile),
     setOpenTabs: (id: string, openTabs: string[]): Promise<void> =>
@@ -112,8 +124,8 @@ const api = {
     activeThread: (id: string): Promise<string> => ipcRenderer.invoke('agent:activeThread', id),
     threadChat: (id: string, threadId: string): Promise<ChatItem[]> =>
       ipcRenderer.invoke('agent:thread:chat', id, threadId),
-    createThread: (id: string, title?: string): Promise<AgentThread> =>
-      ipcRenderer.invoke('agent:thread:create', id, title),
+    createThread: (id: string, title?: string, kind?: 'workshop'): Promise<AgentThread> =>
+      ipcRenderer.invoke('agent:thread:create', id, title, kind),
     renameThread: (id: string, threadId: string, title: string): Promise<void> =>
       ipcRenderer.invoke('agent:thread:rename', id, threadId, title),
     deleteThread: (id: string, threadId: string): Promise<{ activeThreadId: string }> =>

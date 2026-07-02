@@ -4,7 +4,11 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AgentThread, ChatItem, DocMeta, ProjectMeta } from '@shared/types'
 import { DOC_EXTENSIONS, deriveDocMeta, docTypeForFile, isDocFile } from '@shared/docTypes'
+import { docTypeFor, fileNameForType, type DocTypeDef, type HarnessConfig } from '@shared/harness'
 import { initRepo, commitAll } from './git'
+// note: harness.ts imports projectPath back from this module; both sides only
+// touch each other at call time, so the cycle is harmless
+import { loadMergedConfig, studioName } from './harness'
 
 export const LIBRARY_ROOT = path.join(app.getPath('documents'), 'Fabulist')
 const LEGACY_LIBRARY_ROOT = path.join(app.getPath('documents'), 'Lobstertale')
@@ -49,10 +53,16 @@ user's writing partner for "${title}".
   directly — the user reviews and approves every edit before it lands.
 - Keep chat replies brief. The documents are where the substance goes.
 - You may create supporting files (research notes, outlines, a story bible) here.
+- \`fabulist.json\` (optional, at the project root) is the studio manifest: it can
+  define custom doc types, palette actions, panels, and a permission profile for
+  this project. The user designs it with you in a "studio workshop" conversation.
 `
 
+// .claude/ itself is committed (skills/agents are part of a shareable studio);
+// only session-local files stay out of the repo
 const GITIGNORE = `.fabulist/
-.claude/
+.claude/settings.local.json
+fabulist.local.json
 `
 
 function slugify(title: string): string {
@@ -199,22 +209,56 @@ function patchProject(projectId: string, patch: Partial<ProjectFile>): Promise<v
 
 // --- doc metadata ---
 
-async function readDocMeta(projectId: string, file: string): Promise<DocMeta | null> {
+/** Drop a leading YAML frontmatter block so title/preview derive from the body. */
+function stripFrontmatter(content: string): string {
+  const m = content.match(/^---\n[\s\S]*?\n---\n?/)
+  return m ? content.slice(m[0].length) : content
+}
+
+function frontmatterValue(content: string, key: string): string | undefined {
+  const fm = content.match(/^---\n([\s\S]*?)\n---/)
+  if (!fm) return undefined
+  for (const line of fm[1].split('\n')) {
+    const m = line.match(/^([\w-]+):\s*(.+)$/)
+    if (m && m[1] === key) return m[2].trim().replace(/^["']|["']$/g, '')
+  }
+  return undefined
+}
+
+/** Title per the harness doc type's titleFrom rule; falls back to the h1 derivation. */
+function titleForType(file: string, content: string, harnessType: DocTypeDef, fallback: string): string {
+  const rule = harnessType.titleFrom
+  if (rule === 'filename') return file.replace(/(\.[^.]+)+$/, '')
+  if (rule?.startsWith('frontmatter:')) {
+    return frontmatterValue(content, rule.slice('frontmatter:'.length)) ?? fallback
+  }
+  return fallback
+}
+
+async function readDocMeta(
+  projectId: string,
+  file: string,
+  config?: HarnessConfig
+): Promise<DocMeta | null> {
   const type = docTypeForFile(file)
   if (!type) return null
   const full = docPath(projectId, file)
   try {
     const [content, stat] = await Promise.all([fs.readFile(full, 'utf8'), fs.stat(full)])
-    const derived = deriveDocMeta(file, content)
+    const harnessType = config ? docTypeFor(config, file) : null
+    const derived = deriveDocMeta(file, harnessType ? stripFrontmatter(content) : content)
     return {
       file,
       type,
-      title: derived.title,
+      title: harnessType ? titleForType(file, content, harnessType, derived.title) : derived.title,
       path: full,
       createdAt: stat.birthtimeMs,
       updatedAt: stat.mtimeMs,
       wordCount: derived.wordCount,
-      preview: derived.preview
+      preview: derived.preview,
+      kind: harnessType?.id,
+      kindLabel: harnessType ? harnessType.label ?? harnessType.id : undefined,
+      kindIcon: harnessType?.icon
     }
   } catch {
     return null
@@ -223,26 +267,31 @@ async function readDocMeta(projectId: string, file: string): Promise<DocMeta | n
 
 /** All docs in a project, ordered by project.json then any newly-discovered files. */
 export async function listProjectDocs(projectId: string): Promise<DocMeta[]> {
-  const project = await readProject(projectId)
-  const onDisk = await scanDocFiles(projectId)
+  const [project, onDisk, config] = await Promise.all([
+    readProject(projectId),
+    scanDocFiles(projectId),
+    loadMergedConfig(projectId)
+  ])
   const ordered = [
     ...project.docs.map((d) => d.file).filter((f) => onDisk.includes(f)),
     ...onDisk.filter((f) => !project.docs.some((d) => d.file === f))
   ]
-  const metas = await Promise.all(ordered.map((f) => readDocMeta(projectId, f)))
+  const metas = await Promise.all(ordered.map((f) => readDocMeta(projectId, f, config)))
   return metas.filter((m): m is DocMeta => m !== null)
 }
 
 export async function listProjects(): Promise<ProjectMeta[]> {
   await ensureLibraryRoot()
   const entries = await fs.readdir(LIBRARY_ROOT, { withFileTypes: true })
-  const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+  // symlinks admit folders imported from elsewhere (openFolder)
+  const dirs = entries.filter((e) => (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.'))
   const metas = await Promise.all(
     dirs.map(async (e) => {
       const id = e.name
       const files = await scanDocFiles(id)
-      if (files.length === 0) return null
-      const project = await readProject(id)
+      // folders with no docs are noise — unless they declare a studio manifest
+      if (files.length === 0 && !(await exists(path.join(projectPath(id), 'fabulist.json')))) return null
+      const [project, studio] = await Promise.all([readProject(id), studioName(id)])
       const stats = await Promise.all(
         files.map((f) => fs.stat(docPath(id, f)).catch(() => null))
       )
@@ -254,7 +303,8 @@ export async function listProjects(): Promise<ProjectMeta[]> {
         path: projectPath(id),
         docCount: files.length,
         createdAt: births.length ? Math.min(...births) : Date.now(),
-        updatedAt: times.length ? Math.max(...times) : Date.now()
+        updatedAt: times.length ? Math.max(...times) : Date.now(),
+        studio
       }
       return meta
     })
@@ -301,28 +351,72 @@ export async function createProject(title: string): Promise<ProjectMeta> {
   return meta
 }
 
-/** Create a new doc in a project; registers it and makes it the active tab. */
-export async function createDoc(projectId: string, title: string): Promise<DocMeta> {
+/**
+ * Create a new doc in a project; registers it and makes it the active tab.
+ * With a harness doc-type id, the filename follows the type's glob and the
+ * type's template seeds the content.
+ */
+export async function createDoc(projectId: string, title: string, typeId?: string): Promise<DocMeta> {
   const clean = title.trim() || 'Untitled'
+  const config = await loadMergedConfig(projectId)
+  const harnessType = typeId ? config.docTypes.find((t) => t.id === typeId) ?? null : null
   return withStateLock(projectId, async () => {
     const project = await ensureProjectUnlocked(projectId)
     const onDisk = await scanDocFiles(projectId)
-    const file = uniqueDocFile([...onDisk, ...project.docs.map((d) => d.file)], clean)
-    await fs.writeFile(docPath(projectId, file), `# ${clean}\n\n`)
+    const taken = [...onDisk, ...project.docs.map((d) => d.file)]
+    let file: string
+    if (harnessType) {
+      const slug = slugify(clean)
+      file = fileNameForType(harnessType, slug)
+      for (let n = 2; taken.includes(file); n++) file = fileNameForType(harnessType, `${slug}-${n}`)
+    } else {
+      file = uniqueDocFile(taken, clean)
+    }
+    const seed = harnessType?.template
+      ? harnessType.template.replaceAll('{{title}}', clean)
+      : `# ${clean}\n\n`
+    await fs.writeFile(docPath(projectId, file), seed)
     await writeProjectUnlocked(projectId, {
       ...project,
       docs: [...project.docs, { file }],
       openTabs: [...project.openTabs.filter((f) => f !== file), file],
       activeDoc: file
     })
-    const meta = await readDocMeta(projectId, file)
+    const meta = await readDocMeta(projectId, file, config)
     if (!meta) throw new Error('Failed to create document')
     await commitAll(projectPath(projectId), `Added "${clean}"`).catch(() => {})
     return meta
   })
 }
 
+/**
+ * Bring an existing folder (e.g. a cloned Claude Code project with a
+ * fabulist.json) into the library by symlinking it under the library root.
+ * The folder stays where it is; deleting the project later removes only the
+ * link. Returns the project id.
+ */
+export async function openFolder(folder: string): Promise<string> {
+  await ensureLibraryRoot()
+  const real = await fs.realpath(folder)
+  const stat = await fs.stat(real)
+  if (!stat.isDirectory()) throw new Error('Not a folder')
+  // already in the library (directly or via an existing link)?
+  const entries = await fs.readdir(LIBRARY_ROOT, { withFileTypes: true })
+  for (const e of entries) {
+    if (e.name.startsWith('.')) continue
+    const target = await fs.realpath(path.join(LIBRARY_ROOT, e.name)).catch(() => null)
+    if (target === real) return e.name
+  }
+  let id = slugify(path.basename(real))
+  let n = 1
+  while (await exists(projectPath(id))) id = `${slugify(path.basename(real))}-${++n}`
+  await fs.symlink(real, projectPath(id), 'dir')
+  await initRepo(real).catch(() => {})
+  return id
+}
+
 export async function deleteProject(projectId: string): Promise<void> {
+  // for symlinked (imported) folders this removes only the link
   await fs.rm(projectPath(projectId), { recursive: true, force: true })
 }
 
@@ -383,6 +477,8 @@ interface StoredThread {
   chat: ChatItem[]
   createdAt: number
   updatedAt: number
+  /** 'workshop' threads design the studio harness instead of the documents */
+  kind?: 'workshop'
 }
 
 interface ProjectState {
@@ -464,7 +560,8 @@ function toMeta(t: StoredThread): AgentThread {
     title: t.title,
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
-    messageCount: t.chat.length
+    messageCount: t.chat.length,
+    kind: t.kind
   }
 }
 
@@ -525,7 +622,7 @@ export function getThreadChat(id: string, threadId: string): Promise<ChatItem[]>
   })
 }
 
-export function createThread(id: string, title?: string): Promise<AgentThread> {
+export function createThread(id: string, title?: string, kind?: 'workshop'): Promise<AgentThread> {
   return withStateLock(id, async () => {
     const { threads } = await resolveThreads(id)
     const now = Date.now()
@@ -534,7 +631,8 @@ export function createThread(id: string, title?: string): Promise<AgentThread> {
       title: title?.trim() || DEFAULT_THREAD_TITLE,
       chat: [],
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      kind
     }
     await patchStateUnlocked(id, { threads: [...threads, thread], activeThreadId: thread.id })
     return toMeta(thread)

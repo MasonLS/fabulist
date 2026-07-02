@@ -22,6 +22,13 @@ window.fabulist.doc.onExternalChange((id, docFile, content) =>
 window.fabulist.comments.onChanged((id) => {
   if (useStore.getState().activeProjectId === id) useStore.getState().reloadThreads()
 })
+// harness hot reload: fabulist.json / .claude changes re-render the studio in place
+window.fabulist.harness.onChanged((id) => {
+  const s = useStore.getState()
+  if (s.activeProjectId !== id) return
+  void s.loadHarness()
+  void s.loadDocs() // doc kinds/titles may derive from the manifest
+})
 
 window.addEventListener('beforeunload', () => {
   const { activeProjectId } = useStore.getState()

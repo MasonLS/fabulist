@@ -5,7 +5,35 @@ All notable changes to Fabulist are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **Studio harnesses (`fabulist.json`).** A project folder can now describe its own studio in a
+  checked-in manifest: custom document types (filename globs, templates, rail icons, title
+  rules), palette actions that run skills or canned prompts, read-only panels rendered from
+  project files, and a permission profile. The manifest is meant to live in git — one
+  collaborator can design the harness and everyone who opens the project gets the same studio.
+  It hot-reloads: when the agent (or a teammate's pull) edits `fabulist.json` or `.claude/`,
+  the UI updates in place. Personal tweaks go in `fabulist.local.json` (gitignored). See
+  `docs/harness.md` for the schema.
+- **Command palette (⌘K).** Actions from the manifest, skills discovered under
+  `.claude/skills/`, panels, documents, and app commands in one searchable list. Selection
+  actions use the current editor selection.
+- **Studio workshop.** A dedicated agent conversation (Workshop button, or "Customize studio…"
+  in the palette) whose system prompt knows the manifest schema — you design doc types, skills,
+  actions, and panels by talking, and the agent writes the harness files.
+- **Trusted permission profiles.** A manifest may request `"edits": "auto"` (apply the agent's
+  file edits without per-edit approval) or `"bash": "deny"`. Auto-edits only take effect after
+  you explicitly trust the studio; trust is stored outside the repo and keyed to the permissions
+  block, so a cloned project can never grant itself anything, and any change to the block
+  re-prompts. Tightening (`bash: deny`) applies unconditionally.
+- **Open folder…** in the library imports any existing folder — e.g. a cloned Claude Code
+  project with a `fabulist.json` — as a project via a symlink, leaving it where it is.
+- New documents can be created as a studio doc type (picker in the tab bar and rail), which
+  names the file to match the type's glob and seeds it from the type's template.
+
 ### Changed
+- New projects' `.gitignore` no longer excludes `.claude/` — skills and agent personas are part
+  of a shareable studio. Only `.fabulist/`, `.claude/settings.local.json`, and
+  `fabulist.local.json` stay untracked.
 - **Documents are now grouped into projects.** The library rail lists *projects*; opening one
   shows its documents in tabs across the top of the workspace (with a + to create or open more).
   A project is a single folder, git repo, and `CLAUDE.md`, and the writing agent now works from

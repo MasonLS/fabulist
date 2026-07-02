@@ -18,6 +18,7 @@ import {
 } from './library'
 import { commitAll } from './git'
 import * as comments from './comments'
+import { loadGateConfig } from './harness'
 
 /** System prompt tail; the currently-focused doc (if any) is appended per send. */
 function systemAppend(docFile?: string): string {
@@ -31,6 +32,60 @@ project CLAUDE.md. Every file edit you make is shown to the author as a diff for
 before it is applied, so make edits confidently but keep them minimal and well-scoped.
 Keep chat replies short — the documents are the deliverable, not the conversation.`
 }
+
+/**
+ * System prompt tail for workshop threads: the agent designs the studio
+ * harness (fabulist.json, skills, CLAUDE.md) rather than the documents.
+ * Includes the manifest schema so the agent can author it unaided.
+ */
+const WORKSHOP_APPEND = `
+You are in the STUDIO WORKSHOP of Fabulist, an AI-native studio app. In this conversation
+you are not editing the user's documents — you are designing the studio itself: the harness
+that shapes how this project behaves in the app.
+
+You configure the studio by creating and editing these files in the project root:
+- \`fabulist.json\` — the studio manifest (schema below). The app hot-reloads it: actions,
+  doc types, and panels appear in the UI the moment your edit is approved.
+- \`CLAUDE.md\` — standing instructions for the writing agent.
+- \`.claude/skills/<name>/SKILL.md\` — reusable skills the writing agent can invoke;
+  YAML frontmatter with \`name\` and \`description\`, then the skill instructions.
+- \`.claude/agents/<name>.md\` — subagent personas (reviewers, checkers).
+
+fabulist.json schema — every field optional, unknown fields ignored:
+{
+  "name": "Novel Studio",              // studio name shown in the app
+  "description": "one line",
+  "docTypes": [{
+    "id": "scene",                      // required
+    "match": "*.scene.md",             // required filename glob; top-level files only
+    "label": "Scene",
+    "icon": "S",                       // 1–2 chars/emoji, shown in the document rail
+    "titleFrom": "h1",                 // or "filename" or "frontmatter:<key>"
+    "template": "# {{title}}\\n\\n"      // seeds new docs of this type
+  }],
+  "actions": [{
+    "id": "punch-up",
+    "label": "Punch up dialogue",       // required; appears in the ⌘K palette
+    "surface": "selection",            // "selection" | "doc" | "project"
+    "skill": "punch-up-dialogue",      // a .claude/skills name to invoke, and/or:
+    "prompt": "Sharpen this dialogue…" // instructions sent to the writing agent
+  }],
+  "panels": [
+    { "id": "bible", "title": "Story Bible", "source": "bible.md" }
+  ],                                    // read-only rendered views of top-level .md files
+  "permissions": { "edits": "ask", "bash": "ask" }
+                                        // edits: "ask"|"auto"; bash: "ask"|"deny".
+                                        // "auto" only takes effect after the user
+                                        // explicitly trusts the studio in the app.
+}
+
+Guidelines:
+- Start by interviewing the user briefly: what are they making, what does "good" look
+  like, what do they keep doing by hand? Then propose a harness and build it.
+- Prefer several small, well-named skills over one sprawling prompt.
+- fabulist.json is meant to be committed and shared with collaborators; personal
+  overrides belong in fabulist.local.json (gitignored).
+- Keep chat replies brief — the harness files are the deliverable.`
 
 /**
  * In packaged builds the SDK resolves its native engine binary inside app.asar,
@@ -175,6 +230,11 @@ export class AgentManager {
     if (meta && meta.messageCount === 0 && meta.title === DEFAULT_THREAD_TITLE) {
       await updateThread(projectId, threadId, { title: titleFromPrompt(prompt) }).catch(() => {})
     }
+    const workshop = meta?.kind === 'workshop'
+    // bash: deny must remove the tool outright — the engine auto-allows
+    // sandbox-safe commands without consulting canUseTool
+    const gateConfig = await loadGateConfig(projectId).catch(() => null)
+    const bashDenied = gateConfig?.config.permissions.bash === 'deny'
     const abort = new AbortController()
     let editsApplied = 0
 
@@ -197,8 +257,13 @@ export class AgentManager {
       abortController: abort,
       includePartialMessages: true,
       settingSources: ['project'],
-      systemPrompt: { type: 'preset', preset: 'claude_code', append: systemAppend(opts.docFile) },
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: workshop ? WORKSHOP_APPEND : systemAppend(opts.docFile)
+      },
       permissionMode: 'default',
+      disallowedTools: bashDenied ? ['Bash'] : undefined,
       canUseTool: (tool, input, { signal }) =>
         this.gateTool(projectId, cwd, tool, input as Record<string, unknown>, signal, () => editsApplied++),
       stderr: (line) => {
@@ -367,6 +432,21 @@ export class AgentManager {
       return {
         behavior: 'deny',
         message: 'comments.json is managed by Fabulist. Reply in chat instead; the app records comment replies.'
+      }
+    }
+
+    // the studio's permission profile (fabulist.json). A manifest can always
+    // tighten the gate; loosening it (auto edits) requires the user to have
+    // trusted this studio, and any change to the permissions block re-prompts.
+    const gate = await loadGateConfig(projectId).catch(() => null)
+    if (gate) {
+      if (tool === 'Bash' && gate.config.permissions.bash === 'deny') {
+        return { behavior: 'deny', message: 'This studio does not allow shell commands (fabulist.json permissions).' }
+      }
+      const insideProject = filePath && !filePath.startsWith('..') && !path.isAbsolute(filePath)
+      if (gate.trusted && gate.config.permissions.edits === 'auto' && insideProject) {
+        onEditApplied()
+        return { behavior: 'allow', updatedInput: input }
       }
     }
 

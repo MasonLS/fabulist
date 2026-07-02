@@ -15,6 +15,7 @@ import {
   type PermissionRequest,
   type ProjectMeta
 } from '@shared/types'
+import type { ActionDef, Harness } from '@shared/harness'
 import { locateAnchor } from './lib/anchors'
 
 export type SidebarTab = 'chat' | 'comments' | 'history'
@@ -75,6 +76,21 @@ interface FabulistStore {
   queuedCommentSends: { commentId: string; prompt: string; quote: string }[]
   scrollTo: { threadId: string; seq: number } | null
   autoApprove: boolean
+  /** the active project's studio harness (fabulist.json + skills), if loaded */
+  harness: Harness | null
+  /** an open harness panel replaces the editor view */
+  activePanel: string | null
+  paletteOpen: boolean
+  /** current editor selection, for selection-surface actions */
+  selectionQuote: string | null
+
+  loadHarness: () => Promise<void>
+  trustStudio: (trusted: boolean) => Promise<void>
+  runAction: (action: ActionDef) => void
+  openPanel: (panelId: string | null) => void
+  setPaletteOpen: (open: boolean) => void
+  setSelectionQuote: (quote: string | null) => void
+  openWorkshop: () => Promise<void>
 
   loadProjects: () => Promise<void>
   createProject: (title: string) => Promise<void>
@@ -83,7 +99,7 @@ interface FabulistStore {
   closeProject: () => Promise<void>
 
   loadDocs: () => Promise<void>
-  createDoc: (title: string) => Promise<void>
+  createDoc: (title: string, typeId?: string) => Promise<void>
   deleteDoc: (docFile: string) => Promise<void>
   openTab: (docFile: string) => Promise<void>
   closeTab: (docFile: string) => Promise<void>
@@ -189,6 +205,70 @@ export const useStore = create<FabulistStore>((set, get) => ({
   queuedCommentSends: [],
   scrollTo: null,
   autoApprove: localStorage.getItem('fabulist:autoApprove') === '1',
+  harness: null,
+  activePanel: null,
+  paletteOpen: false,
+  selectionQuote: null,
+
+  loadHarness: async () => {
+    const id = get().activeProjectId
+    if (!id) return
+    const harness = await window.fabulist.harness.load(id)
+    // drop a panel whose definition disappeared out from under us
+    const activePanel =
+      get().activePanel && harness.config.panels.some((p) => p.id === get().activePanel)
+        ? get().activePanel
+        : null
+    set({ harness, activePanel })
+  },
+
+  trustStudio: async (trusted) => {
+    const id = get().activeProjectId
+    if (!id) return
+    await window.fabulist.harness.setTrusted(id, trusted)
+    await get().loadHarness()
+  },
+
+  runAction: (action) => {
+    const quote = action.surface === 'selection' ? get().selectionQuote : null
+    if (action.surface === 'selection' && !quote) return
+    const parts: string[] = []
+    if (action.skill) {
+      parts.push(`Invoke your "${action.skill}" skill (use the Skill tool) and follow it.`)
+    }
+    if (action.prompt) parts.push(action.prompt)
+    if (action.surface === 'doc' && !action.prompt && !action.skill) return
+    if (action.surface === 'doc') {
+      parts.push('Apply this to the document the author is currently focused on.')
+    }
+    set({ paletteOpen: false })
+    get().askClaude(parts.join('\n\n'), quote ? { quote } : {})
+  },
+
+  openPanel: (panelId) => set({ activePanel: panelId }),
+  setPaletteOpen: (open) => set({ paletteOpen: open }),
+  setSelectionQuote: (quote) => {
+    if (get().selectionQuote !== quote) set({ selectionQuote: quote })
+  },
+
+  openWorkshop: async () => {
+    const id = get().activeProjectId
+    if (!id) return
+    const existing = (get().agentThreads[id] ?? []).find((t) => t.kind === 'workshop')
+    if (existing) {
+      await get().selectAgentThread(existing.id)
+      set({ tab: 'chat', sidebarOpen: true })
+      return
+    }
+    const thread = await window.fabulist.agent.createThread(id, 'Studio workshop', 'workshop')
+    set({
+      agentThreads: { ...get().agentThreads, [id]: [...(get().agentThreads[id] ?? []), thread] },
+      activeThread: { ...get().activeThread, [id]: thread.id },
+      chats: { ...get().chats, [thread.id]: [] },
+      tab: 'chat',
+      sidebarOpen: true
+    })
+  },
 
   loadProjects: async () => {
     set({ projects: await window.fabulist.library.projects() })
@@ -210,13 +290,14 @@ export const useStore = create<FabulistStore>((set, get) => ({
     const prev = get().activeProjectId
     if (prev && prev !== id) await get().closeProject()
 
-    const [docs, meta, agentThreads, activeThreadId, commits, model] = await Promise.all([
+    const [docs, meta, agentThreads, activeThreadId, commits, model, harness] = await Promise.all([
       window.fabulist.project.docs(id),
       window.fabulist.project.meta(id),
       window.fabulist.agent.threads(id),
       window.fabulist.agent.activeThread(id),
       window.fabulist.history.log(id),
-      window.fabulist.project.getModel(id)
+      window.fabulist.project.getModel(id),
+      window.fabulist.harness.load(id)
     ])
 
     const present = new Set(docs.map((d) => d.file))
@@ -262,6 +343,10 @@ export const useStore = create<FabulistStore>((set, get) => ({
       inlineSuggestionId: null,
       pendingCommentId: null,
       queuedCommentSends: [],
+      harness,
+      activePanel: null,
+      paletteOpen: false,
+      selectionQuote: null,
       agentThreads: { ...get().agentThreads, [id]: agentThreads },
       activeThread: { ...get().activeThread, [id]: activeThreadId },
       chats: { ...get().chats, [activeThreadId]: chat ?? [] }
@@ -286,7 +371,11 @@ export const useStore = create<FabulistStore>((set, get) => ({
       content: '',
       threads: [],
       commits: [],
-      preview: null
+      preview: null,
+      harness: null,
+      activePanel: null,
+      paletteOpen: false,
+      selectionQuote: null
     })
   },
 
@@ -296,10 +385,10 @@ export const useStore = create<FabulistStore>((set, get) => ({
     set({ docs: await window.fabulist.project.docs(id) })
   },
 
-  createDoc: async (title) => {
+  createDoc: async (title, typeId) => {
     const id = get().activeProjectId
     if (!id) return
-    const meta = await window.fabulist.project.createDoc(id, title)
+    const meta = await window.fabulist.project.createDoc(id, title, typeId)
     await get().loadDocs()
     // add the tab but let setActiveDoc read the seeded file from disk (which also
     // primes the watcher's echo-suppression so the create write doesn't bounce back)
@@ -355,6 +444,8 @@ export const useStore = create<FabulistStore>((set, get) => ({
 
   setActiveDoc: async (docFile) => {
     const id = get().activeProjectId
+    // selecting a doc always leaves any open harness panel
+    if (get().activePanel) set({ activePanel: null })
     if (!id || get().activeDoc === docFile) return
     // stash the outgoing doc's live content and flush its pending write
     const prevDoc = get().activeDoc

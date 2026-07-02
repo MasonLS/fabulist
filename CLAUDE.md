@@ -7,6 +7,11 @@ in the same commit.
 AI-native writing studio. Electron main process runs the Claude Agent SDK directly;
 each user document is a Claude Code project folder under `~/Documents/Fabulist/`.
 
+- A project may carry a studio harness: `fabulist.json` (schema in `docs/harness.md`,
+  parsing in `src/shared/harness.ts`, loading/trust in `src/main/harness.ts`). Doc types,
+  ⌘K palette actions, panels, and the permission profile all derive from it; trust for
+  `edits: "auto"` lives in Electron userData keyed by a hash of the permissions block.
+
 - ESM throughout (`"type": "module"`); electron-vite shims `__dirname` in main — do not declare it.
 - Preload builds to `index.mjs`; window uses `sandbox: false` + `contextIsolation: true` (required for ESM preload).
 - The approval gate lives in `src/main/agent.ts` (`gateTool`). Read-only tools auto-pass;
